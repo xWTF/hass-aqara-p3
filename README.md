@@ -18,6 +18,27 @@ If you feel uncomfortable with AI-generated code, please consider not using this
 
 运行依赖为 `telnetlib3`，由 Home Assistant 自动安装。集成可在设备隔离互联网时独立工作，不依赖米家服务器。
 
+## 安装
+
+### HACS 自定义仓库
+
+[![添加到 HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=xWTF&repository=hass-aqara-p3&category=integration)
+
+点击上方 HACS 按钮，或在 HACS 的“自定义存储库”中添加 `xWTF/hass-aqara-p3`，类别选择“集成”，然后下载。
+
+[![添加到 Home Assistant](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=aqara_p3)
+
+先通过 HACS 下载本集成并重启 Home Assistant，再点击第二个按钮添加设备，填写设备 IP 和 Telnet 密码；登录用户为 `admin`。
+
+### 手动安装
+
+1. 将本仓库的 `custom_components/aqara_p3` 整个文件夹复制到 `<HA 配置目录>/custom_components/`。
+2. 确认 `custom_components/aqara_p3/manifest.json` 存在，然后重启 Home Assistant。
+3. 在“设置 → 设备与服务 → 添加集成”中选择 **Aqara P3**。
+4. 填写设备 IP 和 Telnet 密码；登录用户为 `admin`。
+
+升级时覆盖 `aqara_p3` 文件夹并重启 Home Assistant，已有配置保留。
+
 ## 功能
 
 ### 电力与空调
@@ -37,21 +58,6 @@ If you feel uncomfortable with AI-generated code, please consider not using this
 ### 声音
 
 独立的 “声音” 子设备提供音效选择、音量、播放和停止。自动化动作可指定音效、音量、总播放次数及停止时间。
-
-## 安装
-
-### 手动安装
-
-1. 将本仓库的 `custom_components/aqara_p3` 整个文件夹复制到 `<HA 配置目录>/custom_components/`。
-2. 确认 `custom_components/aqara_p3/manifest.json` 存在，然后重启 Home Assistant。
-3. 在“设置 → 设备与服务 → 添加集成”中选择 **Aqara P3**。
-4. 填写设备 IP 和 Telnet 密码；登录用户为 `admin`。
-
-升级时覆盖 `aqara_p3` 文件夹并重启 Home Assistant，已有配置保留。
-
-### HACS 自定义仓库
-
-仓库发布后，在 HACS 的“自定义存储库”中填写本仓库地址，类别选择“集成”，下载后重启 Home Assistant，再按上述步骤添加集成。
 
 ## 自动化示例
 

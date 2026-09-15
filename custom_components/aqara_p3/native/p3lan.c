@@ -12,6 +12,8 @@
 #include <sys/wait.h>
 #include <sys/syscall.h>
 #include <sys/prctl.h>
+#include <sys/stat.h>
+#include <sys/mount.h>
 #include <fcntl.h>
 #include <signal.h>
 #include <stdint.h>
@@ -127,15 +129,62 @@ cleanup:
 #endif
 }
 
+static int mode_mount(int remove) {
+ const char *source="/tmp/aqara-p3-local-mode/app_monitor.sh";
+ const char *target="/bin/app_monitor.sh";
+ struct stat a,b;
+ if(lstat(source,&a) || lstat(target,&b) || !S_ISREG(a.st_mode) || !S_ISREG(b.st_mode) || a.st_uid!=geteuid()) return 2;
+ int same=a.st_dev==b.st_dev && a.st_ino==b.st_ino;
+ if(remove) return same ? (umount(target)<0 ? 3 : 0) : 2;
+ if(same)return 0;
+ return mount(source,target,NULL,MS_BIND,NULL)<0 ? 3 : 0;
+}
+
+static int local_mode(const char *script,const char *action,int lock,const char *helper) {
+ const char *prefix="/tmp/aqara-p3-local-mode-";
+ size_t n=strlen(prefix);
+ if(strncmp(script,prefix,n) || strlen(script)!=n+15 || strcmp(script+n+12,".sh")) return 2;
+ for(size_t i=n;i<n+12;i++) if(!strchr("0123456789abcdef",script[i])) return 2;
+ if(strcmp(action,"status") && strcmp(action,"enable") && strcmp(action,"disable")) return 2;
+ struct stat st;
+ if(lstat(script,&st) || !S_ISREG(st.st_mode) || st.st_uid!=geteuid()) return 2;
+ pid_t child=fork(); if(child<0)return 3;
+ if(!child) {
+  close(lock); /* Background services must never inherit our lock. */
+  execl("/bin/sh","sh",script,action,helper,(char *)NULL);
+  _exit(127);
+ }
+ double deadline=now()+25; int status,ending=0;
+ for(;;) {
+  pid_t result=waitpid(child,&status,WNOHANG);
+  if(result==child)return WIFEXITED(status)?WEXITSTATUS(status):5;
+  if(result<0 && errno!=EINTR)return 5;
+  if(!ending && (done || now()>deadline)) {
+   kill(child,SIGTERM); ending=1; deadline=now()+5;
+  } else if(ending && now()>deadline) {
+   kill(child,SIGKILL); waitpid(child,&status,0); return 5;
+  }
+  usleep(10000);
+ }
+}
+
 int main(int argc,char **argv) {
  if(argc==2 && !strcmp(argv[1],"version")){puts("p3lan-native-1");return 0;}
+ /* Internal fixed-path mount calls: parent local-mode already holds flock. */
+ if(argc==2 && !strcmp(argv[1],"mode-bind"))return mode_mount(0);
+ if(argc==2 && !strcmp(argv[1],"mode-unbind"))return mode_mount(1);
  signal(SIGPIPE,SIG_IGN);
  signal(SIGTERM,stop); signal(SIGHUP,stop); signal(SIGINT,stop);
  prctl(PR_SET_PDEATHSIG,SIGHUP);
  int lock=open("/tmp/p3lan-native.lock",O_CREAT|O_RDWR,0600);
- if(lock<0 || flock(lock,LOCK_EX|LOCK_NB)<0){fputs("BUSY\n",stderr);return 6;}
+ if(lock<0 || flock(lock,LOCK_EX|LOCK_NB)<0){
+  if(argc>1 && !strcmp(argv[1],"local-mode")) puts("P3_LOCAL_ERROR busy");
+  else fputs("BUSY\n",stderr);
+  return 6;
+ }
  int rc=2;
  if(argc==3 && !strcmp(argv[1],"ipc")){alarm(8);rc=ipc(argv[2]);}
+ else if(argc==4 && !strcmp(argv[1],"local-mode")) rc=local_mode(argv[2],argv[3],lock,argv[0]);
  else if(argc==4 && !strcmp(argv[1],"capture")) {
   int pid=number(argv[2],2,4194304),seconds=number(argv[3],1,300);
   if(pid>0 && seconds>0) {alarm(seconds+5);rc=capture(pid,seconds);}

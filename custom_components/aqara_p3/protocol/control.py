@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (c) 2026 Aqara P3 contributors
 
-"""On-demand bounded Telnet control, using the bundled 74 KB native adapter."""
+"""On-demand bounded Telnet control, using the bundled native adapter."""
 
 import asyncio
 import base64
@@ -24,6 +24,12 @@ REMOTE = "/tmp/p3lan-" + SHA256[:12]
 
 class CommandError(P3Error):
     """Do not retry: device may have acted before the response was lost."""
+
+
+class LocalModeError(CommandError):
+    def __init__(self, code):
+        self.code = code
+        super().__init__(f"Local mode operation failed: {code}")
 
 
 def native_payload():
@@ -75,7 +81,7 @@ class P3Control:
         self.last_capture_result = None
         self._lock = asyncio.Lock()
 
-    async def _prepare(self, session):
+    async def _verify_device(self, session):
         # Identity verification precedes every possible upload or write.
         mac = (await session.read(Resource.MAC)).strip().lower()
         if "p3_" + mac.replace(":", "") != self.expected_uid:
@@ -84,6 +90,9 @@ class P3Control:
             raise InvalidData("Unsupported device")
         if "4.0.4" not in (await session.read(Resource.FIRMWARE)).strip():
             raise InvalidData("Control currently requires verified firmware 4.0.4")
+
+    async def _prepare(self, session):
+        await self._verify_device(session)
         result = await session.run(f"busybox sha256sum {REMOTE} 2>/dev/null || true")
         if not re.search(r"(?m)^" + SHA256 + r"\s", result):
             payload = await asyncio.to_thread(native_payload)
@@ -105,6 +114,86 @@ class P3Control:
         result = await session.run(f"{REMOTE} version")
         if "p3lan-native-1" not in result:
             raise InvalidData("Native helper version mismatch")
+
+    async def local_mode(self, action):
+        if action not in ("status", "enable", "disable"):
+            raise InvalidData("Invalid local mode action")
+        if self.capture_session is not None:
+            raise LocalModeError("busy")
+        async with self._lock:
+            try:
+                async with asyncio.timeout(50):
+                    await self._prepare(self.session)
+                    path = Path(__file__).resolve().parents[1] / "native/local_mode.sh"
+                    raw = await asyncio.to_thread(path.read_bytes)
+                    # Normalize checkout line endings before uploading a shell script.
+                    raw = raw.replace(b"\r\n", b"\n")
+                    digest = hashlib.sha256(raw).hexdigest()
+                    remote = "/tmp/aqara-p3-local-mode-" + digest[:12] + ".sh"
+                    result = await self.session.run(
+                        f"busybox sha256sum {remote} 2>/dev/null || true"
+                    )
+                    if not re.search(r"(?m)^" + digest + r"\s", result):
+                        payload = base64.b64encode(bz2.compress(raw)).decode("ascii")
+                        await self.session._send_line("busybox stty -echo")
+                        await asyncio.sleep(0.3)
+                        async with asyncio.timeout(2):
+                            await self.session._until([PROMPT], limit=8192)
+                        lines = "\n".join(
+                            payload[i : i + 768] for i in range(0, len(payload), 768)
+                        )
+                        await self.session.run(
+                            f"busybox base64 -d <<'P3_MODE_EOF' | busybox bzcat > {remote}.new\n"
+                            + lines
+                            + "\nP3_MODE_EOF",
+                            timeout=10,
+                        )
+                        result = await self.session.run(
+                            f"busybox sha256sum {remote}.new"
+                        )
+                        if not re.search(r"(?m)^" + digest + r"\s", result):
+                            raise InvalidData("Local mode script checksum mismatch")
+                        await self.session.run(
+                            f"chmod 700 {remote}.new && mv {remote}.new {remote}"
+                        )
+                    result = await self.session.run(
+                        f"{REMOTE} local-mode {remote} {action}; true",
+                        timeout=35,
+                        cap=16384,
+                    )
+                    errors = re.findall(r"(?m)^P3_LOCAL_ERROR ([a-z_]+)$", result)
+                    if errors:
+                        raise LocalModeError(errors[-1])
+                    states = re.findall(r"(?m)^P3_LOCAL_STATE (\{[^\n]+\})$", result)
+                    if len(states) != 1:
+                        raise InvalidData("Missing local mode result")
+                    state = json.loads(states[0])
+                    if (
+                        not isinstance(state, dict)
+                        or set(state)
+                        != {"mode", "backup", "cloud_running", "monitor_running"}
+                        or state.get("mode") not in ("local", "cloud")
+                        or state.get("backup") not in ("ready", "absent", "conflict")
+                        or type(state.get("cloud_running")) is not bool
+                        or type(state.get("monitor_running")) is not bool
+                    ):
+                        raise InvalidData("Invalid local mode result")
+                    if action == "enable" and (
+                        state["mode"] != "local"
+                        or state["cloud_running"]
+                        or not state["monitor_running"]
+                        or state["backup"] != "ready"
+                    ):
+                        raise LocalModeError("verification_failed")
+                    if action == "disable" and (
+                        state["mode"] != "cloud"
+                        or not state["cloud_running"]
+                        or not state["monitor_running"]
+                    ):
+                        raise LocalModeError("verification_failed")
+                    return state
+            finally:
+                await self.session.close()
 
     async def _ipc(self, method, params, *, target=512):
         if self.capture_session is not None:

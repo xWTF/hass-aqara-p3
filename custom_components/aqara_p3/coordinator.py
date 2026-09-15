@@ -14,6 +14,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from .ac_controller import ACController
 from .audio import AudioCoordinator
 from .const import CONF_POLL_INTERVAL, DEFAULT_POLL_INTERVAL, DOMAIN, UPDATE_TIMEOUT
+from .local_mode import LocalModeController
 from .protocol.config import DeviceConfig
 from .protocol.control import P3Control
 from .protocol.device import ReadOnlyDevice
@@ -25,6 +26,10 @@ LOGGER = logging.getLogger(__name__)
 
 class P3Coordinator(DataUpdateCoordinator[dict]):
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry):
+        self.reload_data = dict(entry.data)
+        self.reload_options = {
+            k: v for k, v in entry.options.items() if k != "local_mode"
+        }
         self.device = ReadOnlyDevice(
             TelnetReader(
                 DeviceConfig(
@@ -53,6 +58,7 @@ class P3Coordinator(DataUpdateCoordinator[dict]):
         self.control = P3Control(self.device.transport.config, self.expected_uid)
         self.ac = ACController(self, entry)
         self.audio = AudioCoordinator(hass, entry, self)
+        self.local_mode = LocalModeController(self, entry)
 
     async def _async_update_data(self):
         task = asyncio.current_task()
@@ -87,6 +93,7 @@ class P3Coordinator(DataUpdateCoordinator[dict]):
 
     async def async_shutdown(self):
         await super().async_shutdown()
+        await self.local_mode.shutdown()
         await self.audio.async_shutdown()
         await self.ac.shutdown()
         task = self._update_task

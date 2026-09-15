@@ -5,7 +5,12 @@
 async def async_get_config_entry_diagnostics(hass, entry):
     coordinator = entry.runtime_data
     return {
-        "version": "0.4.4",
+        "version": "0.4.7",
+        "local_mode": {
+            "requested": entry.options.get("local_mode"),
+            "state": coordinator.local_mode.state,
+            "last_error": coordinator.local_mode.last_error,
+        },
         "audio_available": coordinator.audio.last_update_success,
         "audio": coordinator.audio.data,
         "model": entry.data.get("model"),

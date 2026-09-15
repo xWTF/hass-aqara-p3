@@ -23,6 +23,7 @@ REQUIRED = {
     "LICENSE",
     "native/p3lan.c",
     "native/p3lan-helper",
+    "native/local_mode.sh",
     "native/LICENSE.musl",
     "protocol/native_info.py",
 }

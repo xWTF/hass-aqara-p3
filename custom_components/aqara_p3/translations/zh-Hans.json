@@ -49,7 +49,8 @@
           "capture": "抓取遥控器报文",
           "capture_result": "查看／导出最近抓取",
           "outlet_off": "关闭插座电源",
-          "outlet_on": "恢复插座供电"
+          "outlet_on": "恢复插座供电",
+          "local_mode": "运行模式"
         }
       },
       "settings": {
@@ -96,16 +97,29 @@
         "menu_options": {
           "capture_stop": "停止并查看结果"
         }
+      },
+      "local_mode": {
+        "title": "运行模式",
+        "description": "当前：{status}。\n\n本地模式停用米家云客户端，保留 HA 本地控制。设备重启后，HA 连通时会自动重新应用；HA 离线期间可能暂时运行云客户端。\n\n首次启用会在设备 `/data/aqara_p3/local-mode-v1/` 保存原始监控脚本备份。恢复米家云服务时撤销运行时覆盖，备份继续保留。",
+        "data": {
+          "mode": "模式"
+        }
       }
     },
     "progress": {
       "preparing_capture": "正在准备接收，请稍候。",
-      "receiving": "已就绪：现在可以按遥控器，抓取结束后显示结果。"
+      "receiving": "已就绪：现在可以按遥控器，抓取结束后显示结果。",
+      "changing_local_mode": "正在切换设备运行模式…"
     },
     "error": {
       "capture_failed": "无法启动抓取，请确认设备在线且没有其他抓取任务。",
       "no_matching_frame": "没有可采用的大金报文，或尚未选择大金协议。",
-      "confirmation_required": "必须明确勾选确认才能断电。"
+      "confirmation_required": "必须明确勾选确认才能断电。",
+      "local_mode_failed": "切换结果待确认。请检查设备连接后重新打开运行模式。",
+      "local_mode_backup_conflict": "设备备份校验失败，请检查原始备份文件后重试。",
+      "local_mode_system_changed": "监控脚本或其挂载已发生变化，请先检查设备上的修改。",
+      "local_mode_busy": "设备正在处理模式切换或红外抓取，请稍后重试。",
+      "local_mode_rollback_failed": "切换后的回滚未完成，请通过 Telnet 检查设备并恢复运行模式。"
     },
     "abort": {
       "capture_done": "结果已保存。",
@@ -246,6 +260,12 @@
       "options": {
         "daikin_p3": "大金 E-Max 7",
         "capture_only": "仅抓取（其他遥控器）"
+      }
+    },
+    "operating_mode": {
+      "options": {
+        "cloud": "米家云服务",
+        "local": "本地模式（HA 维护）"
       }
     }
   },

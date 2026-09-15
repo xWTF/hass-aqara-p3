@@ -50,6 +50,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: P3ConfigEntry) -> bool:
         from .services import register_services
 
         register_services(hass)
+        coordinator.local_mode.start()
     except BaseException:
         await coordinator.async_shutdown()
         raise
@@ -63,6 +64,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: P3ConfigEntry) -> bool:
 
 
 async def async_reload_entry(hass: HomeAssistant, entry: P3ConfigEntry):
+    coordinator = entry.runtime_data
+    options = {k: v for k, v in entry.options.items() if k != "local_mode"}
+    if (
+        dict(entry.data) == coordinator.reload_data
+        and options == coordinator.reload_options
+    ):
+        # The mode controller applied the change before saving this option.
+        coordinator.local_mode.start(reconcile=False)
+        return
     await hass.config_entries.async_reload(entry.entry_id)
 
 

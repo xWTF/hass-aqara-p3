@@ -27,6 +27,7 @@ def release_repo(tmp_path, monkeypatch):
         "LICENSE": b"Project license",
         "native/p3lan.c": b"/* source */",
         "native/p3lan-helper": helper,
+        "native/local_mode.sh": b"#!/bin/sh\n",
         "native/LICENSE.musl": b"Third-party license",
         "protocol/native_info.py": f'SHA256 = "{hashlib.sha256(helper).hexdigest()}"'.encode(),
     }
@@ -61,6 +62,7 @@ def test_release_contents_symlinks_checksum_and_reproducibility(release_repo, tm
             "README.md",
             "LICENSE",
             "native/p3lan-helper",
+            "native/local_mode.sh",
             "native/LICENSE.musl",
             "protocol/native_info.py",
         }

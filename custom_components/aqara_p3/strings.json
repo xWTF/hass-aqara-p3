@@ -49,7 +49,8 @@
           "capture": "Capture remote commands",
           "capture_result": "View / export last capture",
           "outlet_off": "Turn off outlet power",
-          "outlet_on": "Restore outlet power"
+          "outlet_on": "Restore outlet power",
+          "local_mode": "Operating mode"
         }
       },
       "settings": {
@@ -96,16 +97,29 @@
         "menu_options": {
           "capture_stop": "Stop and view results"
         }
+      },
+      "local_mode": {
+        "title": "Operating mode",
+        "description": "Current: {status}.\n\nLocal mode stops the Mijia cloud client while retaining HA local control. HA reapplies it after reconnecting following a device restart; the cloud client may run while HA is offline.\n\nThe first activation saves the original monitor under `/data/aqara_p3/local-mode-v1/` on the device. Restoring Mijia cloud removes the runtime overlay and retains the backup.",
+        "data": {
+          "mode": "Mode"
+        }
       }
     },
     "progress": {
       "preparing_capture": "Preparing the receiver. Please wait.",
-      "receiving": "Ready: press your remote now. Results appear after capture finishes."
+      "receiving": "Ready: press your remote now. Results appear after capture finishes.",
+      "changing_local_mode": "Changing device operating mode…"
     },
     "error": {
       "capture_failed": "Could not start capture. Check connectivity and other capture sessions.",
       "no_matching_frame": "No matching Daikin frame or Daikin profile not selected.",
-      "confirmation_required": "Explicit confirmation is required before cutting power."
+      "confirmation_required": "Explicit confirmation is required before cutting power.",
+      "local_mode_failed": "Result unconfirmed. Check the device connection and reopen Operating mode.",
+      "local_mode_backup_conflict": "Device backup validation failed. Check the original backup before retrying.",
+      "local_mode_system_changed": "The monitor script or mount has changed. Check existing device modifications.",
+      "local_mode_busy": "A mode change or IR capture is in progress. Try again later.",
+      "local_mode_rollback_failed": "Rollback did not complete. Check the device over Telnet and restore its operating mode."
     },
     "abort": {
       "capture_done": "Results saved.",
@@ -246,6 +260,12 @@
       "options": {
         "daikin_p3": "Daikin E-Max 7",
         "capture_only": "Capture only (other remotes)"
+      }
+    },
+    "operating_mode": {
+      "options": {
+        "cloud": "Mijia cloud",
+        "local": "Local mode (maintained by HA)"
       }
     }
   },

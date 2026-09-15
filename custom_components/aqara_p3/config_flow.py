@@ -13,6 +13,7 @@ from homeassistant.helpers import selector
 
 from .const import CONF_POLL_INTERVAL, DEFAULT_POLL_INTERVAL, DOMAIN, UPDATE_TIMEOUT
 from .protocol.config import DeviceConfig
+from .protocol.control import LocalModeError
 from .protocol.device import ReadOnlyDevice
 from .protocol.errors import (
     AuthenticationError,
@@ -117,18 +118,104 @@ class P3OptionsFlow(config_entries.OptionsFlow):
         self._capture_task = None
         self._prepare_task = None
         self._outlet_confirmed = False
+        self._mode_task = None
+        self._mode_progress = None
 
     async def async_step_init(self, user_input=None):
         return self.async_show_menu(
             step_id="init",
             menu_options=[
                 "settings",
+                "local_mode",
                 "capture",
                 "capture_result",
                 "outlet_off",
                 "outlet_on",
             ],
         )
+
+    async def async_step_local_mode(self, user_input=None, *, error=None):
+        controller = self.config_entry.runtime_data.local_mode
+        errors = {"base": error} if error else {}
+        if user_input is not None:
+            try:
+                self._mode_task = controller.start_change(user_input["mode"] == "local")
+
+                async def wait_change():
+                    return await asyncio.shield(self._mode_task)
+
+                self._mode_progress = self.hass.async_create_task(
+                    wait_change(), "Aqara P3 mode change progress"
+                )
+                return await self.async_step_local_mode_progress()
+            except HomeAssistantError:
+                errors["base"] = "local_mode_busy"
+        elif not error:
+            try:
+                await controller.refresh()
+            except LocalModeError as err:
+                key = (
+                    err.code
+                    if err.code in ("backup_conflict", "system_changed", "busy")
+                    else "failed"
+                )
+                errors["base"] = "local_mode_" + key
+            except (P3Error, OSError, TimeoutError, ValueError):
+                errors["base"] = "local_mode_failed"
+        state = controller.state
+        zh = self.hass.config.language.startswith("zh")
+        labels = {
+            "local": "本地模式" if zh else "Local mode",
+            "cloud": "米家云服务" if zh else "Mijia cloud",
+        }
+        status = (
+            labels.get(state["mode"], "") if state else ("待确认" if zh else "Unknown")
+        )
+        return self.async_show_form(
+            step_id="local_mode",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        "mode",
+                        default="local"
+                        if self.config_entry.options.get("local_mode")
+                        else "cloud",
+                    ): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=["cloud", "local"], translation_key="operating_mode"
+                        )
+                    )
+                }
+            ),
+            description_placeholders={"status": status},
+            errors=errors,
+        )
+
+    async def async_step_local_mode_progress(self, user_input=None):
+        if not self._mode_progress.done():
+            return self.async_show_progress(
+                step_id="local_mode_progress",
+                progress_action="changing_local_mode",
+                progress_task=self._mode_progress,
+            )
+        return self.async_show_progress_done(next_step_id="local_mode_result")
+
+    async def async_step_local_mode_result(self, user_input=None):
+        try:
+            self._mode_progress.result()
+        except LocalModeError as err:
+            key = (
+                err.code
+                if err.code
+                in ("backup_conflict", "system_changed", "busy", "rollback_failed")
+                else "failed"
+            )
+            return await self.async_step_local_mode(error="local_mode_" + key)
+        except (P3Error, HomeAssistantError, OSError, TimeoutError, ValueError):
+            return await self.async_step_local_mode(error="local_mode_failed")
+        # The controller already saved the choice, even if this dialog was closed.
+        # None completes the options flow without writing a second options snapshot.
+        return self.async_create_entry(title="", data=None)
 
     async def async_step_outlet_on(self, user_input=None):
         try:

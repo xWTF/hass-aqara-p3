@@ -5,7 +5,7 @@
 async def async_get_config_entry_diagnostics(hass, entry):
     coordinator = entry.runtime_data
     return {
-        "version": "0.4.7",
+        "version": "0.4.8",
         "local_mode": {
             "requested": entry.options.get("local_mode"),
             "state": coordinator.local_mode.state,
@@ -17,7 +17,7 @@ async def async_get_config_entry_diagnostics(hass, entry):
         "firmware": entry.data.get("firmware"),
         "available": coordinator.last_update_success,
         "last_cache_read": coordinator.last_cache_read,
-        "data_source": "firmware_cache",
+        "data_source": (coordinator.data or {}).get("source"),
         "values": coordinator.data,
         "control": {
             "profile": coordinator.ac.profile,

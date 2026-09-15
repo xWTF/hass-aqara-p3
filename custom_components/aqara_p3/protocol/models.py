@@ -120,7 +120,18 @@ class Snapshot:
     acquired_at: str
 
     @classmethod
-    def decode(cls, identity, *, power, ac, fan, relay, ac_function, chip_temperature):
+    def decode(
+        cls,
+        identity,
+        *,
+        power,
+        ac,
+        fan,
+        relay,
+        ac_function,
+        chip_temperature,
+        load_power=None,
+    ):
         p = properties(power, 12)
         a = properties(ac, 10)
         f = properties(fan, 18)
@@ -131,6 +142,7 @@ class Snapshot:
             configured_mode = enum_value(a[2], MIOT_MODES)
             values = {
                 "power_w": finite_number(p[2], 0, 5000),
+                "power_source": "firmware_cache",
                 "energy_kwh": finite_number(p[1], 0, 1e9),
                 "relay_on": boolean(r[1]),
                 "ac_on": on,
@@ -141,6 +153,16 @@ class Snapshot:
                 "source": "firmware_cache",
                 "control_enabled": False,
             }
+            # mha_ir writes this property before mha_master synchronizes its
+            # slower power-consumption JSON. Prefer the property when present.
+            if load_power is not None and load_power.strip():
+                try:
+                    watts = float(load_power)
+                except ValueError:
+                    raise InvalidData("负载功率属性无效") from None
+                values["power_w"] = finite_number(watts, 0, 5000)
+                values["power_source"] = "device_property"
+                values["source"] = "firmware_cache_and_device_properties"
             # Fan-only and dry may have no meaningful setpoint. Do not expose
             # the vendor's sentinel 0 as a room or target temperature.
             target = a.get(4)

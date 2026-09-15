@@ -30,6 +30,8 @@ If you feel uncomfortable with AI-generated code, please consider not using this
 - 各模式分别保存温度、风量及除湿微调。
 - 可关联外部室温实体；提供遥控器报文抓取界面。
 
+功率优先读取原厂 IR 服务维护的负载功率属性，减少 JSON 缓存造成的更新延迟。读取间隔在“选项 → 控制与传感器设置”中调整，默认15秒、最低10秒；累计电量仍读取原厂统计。实际测量值的变化频率取决于设备采样和上报策略，相同读数通常不会增加新的历史状态点。
+
 定时开关机、康达舒睡和原厂缓存诊断实体默认禁用，可在设备页按需启用。插座供电操作提供独立动作与断电确认。
 
 ### 声音
@@ -129,8 +131,8 @@ python -m ruff format --check custom_components/aqara_p3 tests_component
 先更新 `custom_components/aqara_p3/manifest.json` 中的版本号并提交，再推送对应 tag：
 
 ```sh
-git tag v0.4.7
-git push origin v0.4.7
+git tag v0.4.8
+git push origin v0.4.8
 ```
 
 GitHub Actions 会核对 tag 与组件版本，然后创建 Release、自动生成发布说明并上传：

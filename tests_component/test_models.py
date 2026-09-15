@@ -61,6 +61,48 @@ def test_zero_temperature_is_not_measurement(identity, raw_snapshot):
     )
 
 
+def test_power_property_takes_precedence_over_slow_json_cache(identity, raw_snapshot):
+    state = Snapshot.decode(identity, **raw_snapshot, load_power="321\n")
+    assert state.values["power_w"] == 321
+    assert state.values["power_source"] == "device_property"
+    assert state.values["energy_kwh"] == 0.26
+    state = Snapshot.decode(identity, **raw_snapshot, load_power="0")
+    assert state.values["power_w"] == 0
+
+
+@pytest.mark.parametrize("raw", [None, "", " \n"])
+def test_missing_power_property_uses_labelled_cache(identity, raw_snapshot, raw):
+    state = Snapshot.decode(identity, **raw_snapshot, load_power=raw)
+    assert state.values["power_w"] == 196
+    assert state.values["power_source"] == "firmware_cache"
+
+
+@pytest.mark.parametrize("raw", ["nan", "inf", "-1", "5001", "bad"])
+def test_invalid_power_property_is_not_treated_as_fresh_cache(
+    identity, raw_snapshot, raw
+):
+    with pytest.raises(InvalidData):
+        Snapshot.decode(identity, **raw_snapshot, load_power=raw)
+
+
+async def test_snapshot_reads_live_power_property(identity, raw_snapshot):
+    from unittest.mock import AsyncMock
+
+    from custom_components.aqara_p3.protocol.device import ReadOnlyDevice
+    from custom_components.aqara_p3.protocol.telnet import Resource
+
+    responses = {Resource(k): v for k, v in raw_snapshot.items()}
+    responses[Resource.LOAD_POWER] = "321"
+    transport = AsyncMock()
+    transport.connected = True
+    transport.read.side_effect = lambda resource: responses[resource]
+    device = ReadOnlyDevice(transport)
+    device.identity = identity
+    state = await device.snapshot()
+    assert state.values["power_w"] == 321
+    assert state.values["energy_kwh"] == 0.26
+
+
 @pytest.mark.parametrize(
     "raw",
     [

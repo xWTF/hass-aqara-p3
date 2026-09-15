@@ -25,6 +25,7 @@ class Resource(StrEnum):
     MAC = "mac"
     FIRMWARE = "firmware"
     POWER = "power"
+    LOAD_POWER = "load_power"
     AC = "ac"
     AC_FUNCTION = "ac_function"
     FAN = "fan"
@@ -39,6 +40,7 @@ COMMANDS = {
     Resource.MAC: "cat /sys/class/net/wlan0/address",
     Resource.FIRMWARE: "getprop ro.sys.mi_fw_ver",
     Resource.POWER: "cat /data/alarm/prop-data/power-consumption-data.json",
+    Resource.LOAD_POWER: "getprop persist.app.ir.load_power",
     Resource.AC: "cat /data/alarm/prop-data/air-conditioner-data.json",
     Resource.AC_FUNCTION: "cat /data/alarm/prop-data/ac-function-data.json",
     Resource.FAN: "cat /data/alarm/prop-data/fan-control-data.json",

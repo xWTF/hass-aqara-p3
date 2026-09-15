@@ -30,6 +30,7 @@ class ReadOnlyDevice:
             values = {}
             for name, resource in (
                 ("power", Resource.POWER),
+                ("load_power", Resource.LOAD_POWER),
                 ("ac", Resource.AC),
                 ("fan", Resource.FAN),
                 ("relay", Resource.RELAY),

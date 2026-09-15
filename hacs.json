@@ -1,4 +1,6 @@
 {
   "name": "Aqara P3",
-  "homeassistant": "2026.9.0"
+  "homeassistant": "2026.9.0",
+  "zip_release": true,
+  "filename": "aqara_p3.zip"
 }

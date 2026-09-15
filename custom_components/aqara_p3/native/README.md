@@ -1,7 +1,9 @@
 # Local adapter
 
 `p3lan-helper` is a statically linked MIPS32r2 little-endian, soft-float executable,
-built with Zig 0.14.1 / musl for Linux 3.10. Source: `p3lan.c`.
+built with Zig 0.14.1 / musl for Linux 3.10. Source: `p3lan.c` in the repository
+and the release's Source code downloads. The install ZIP contains the executable
+and license notices.
 
 ```sh
 zig cc -target mipsel-linux.3.10-musleabi -mcpu=mips32r2 -msoft-float -Os -static -s p3lan.c -o p3lan-helper

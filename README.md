@@ -104,3 +104,17 @@ python -m ruff format --check custom_components/aqara_p3 tests_component
 ```
 
 脚本直接编译组件内的 `native/p3lan.c`，更新 helper 和 SHA-256。构建目标与许可信息见[原生程序说明](custom_components/aqara_p3/native/README.md)。
+
+## 发布版本
+
+先更新 `custom_components/aqara_p3/manifest.json` 中的版本号并提交，再推送对应 tag：
+
+```sh
+git tag v0.4.5
+git push origin v0.4.5
+```
+
+GitHub Actions 会核对 tag 与组件版本，然后创建 Release、自动生成发布说明并上传：
+
+- `aqara_p3.zip`：HACS 安装包；手动安装时解压到 `<HA 配置目录>/custom_components/aqara_p3/`。
+- `aqara_p3.zip.sha256`：安装包校验值。

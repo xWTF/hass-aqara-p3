@@ -1,0 +1,2 @@
+* text=auto eol=lf
+custom_components/aqara_p3/native/p3lan-helper -text

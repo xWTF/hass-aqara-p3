@@ -1,0 +1,6 @@
+# Tested with Python 3.14 on Linux/WSL.
+homeassistant==2026.9.2
+telnetlib3==5.0.0
+pytest==9.1.1
+pytest-asyncio==1.4.0
+ruff==0.16.7

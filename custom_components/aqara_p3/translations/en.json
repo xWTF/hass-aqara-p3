@@ -1,0 +1,318 @@
+{
+  "title": "Aqara P3",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect Aqara P3",
+        "description": "Connect over LAN as admin. AC control uses the calibrated Daikin profile. For other remotes select Capture only in options.",
+        "data": {
+          "host": "Device IP address",
+          "password": "Telnet password"
+        }
+      },
+      "reconfigure": {
+        "title": "Connect Aqara P3",
+        "description": "Connect over LAN as admin. AC control uses the calibrated Daikin profile. For other remotes select Capture only in options.",
+        "data": {
+          "host": "Device IP address",
+          "password": "Telnet password"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Connect Aqara P3",
+        "description": "Connect over LAN as admin. AC control uses the calibrated Daikin profile. For other remotes select Capture only in options.",
+        "data": {
+          "host": "Device IP address",
+          "password": "Telnet password"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Telnet login failed. Check the admin password.",
+      "cannot_connect": "Cannot reach the device or the request timed out.",
+      "unsupported_device": "This device model is not supported.",
+      "invalid_data": "Invalid address or unexpected firmware data."
+    },
+    "abort": {
+      "already_configured": "This P3 is already configured.",
+      "wrong_device": "This address belongs to a different device.",
+      "reauth_successful": "Credentials updated.",
+      "reconfigure_successful": "Configuration updated."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Aqara P3",
+        "menu_options": {
+          "settings": "Control and sensor settings",
+          "capture": "Capture remote commands",
+          "capture_result": "View / export last capture",
+          "outlet_off": "Turn off outlet power",
+          "outlet_on": "Restore outlet power"
+        }
+      },
+      "settings": {
+        "title": "Settings",
+        "description": "Choose the room temperature sensor, remote protocol, and polling interval.",
+        "data": {
+          "poll_interval": "Read interval (seconds)",
+          "profile": "Remote profile",
+          "temperature_entity": "Room temperature sensor (optional)"
+        }
+      },
+      "capture": {
+        "title": "IR capture",
+        "description": "Choose a capture duration, wait for the receiving screen, then press the remote toward P3. Capture lasts up to 5 minutes and pauses control.",
+        "data": {
+          "seconds": "Duration (seconds)"
+        }
+      },
+      "capture_result": {
+        "title": "Capture results",
+        "description": "Saved {count} waveforms with {errors} incomplete or invalid frames. Copy the JSON below or download integration diagnostics. Select the checkbox to apply the latest captured remote settings to the HA climate card.",
+        "data": {
+          "export": "Export JSON",
+          "adopt": "Sync latest remote settings"
+        }
+      },
+      "outlet_off": {
+        "title": "Turn off outlet: risk confirmation",
+        "description": "This cuts mains power to the AC. Cutting power during startup or operation may cause damage. Turn the AC off and verify it has stopped first. HA records do not confirm its physical state.",
+        "data": {
+          "confirm": "I understand the risk and confirm cutting outlet power"
+        }
+      },
+      "outlet_off_running": {
+        "title": "Confirm again: AC may be running",
+        "description": "The stored AC state is on, or the latest load-power reading exceeds 100 W. Either condition is treated as running. Cutting power may cause damage. Cancel and turn the AC off first, or confirm to cut mains power immediately.",
+        "data": {
+          "confirm": "I still confirm cutting power"
+        }
+      },
+      "capturing": {
+        "title": "Receiving remote signals",
+        "description": "Point the remote toward P3 and press its buttons. Choose Stop and view results when finished. The time limit saves the capture automatically. Closing this window ends capture; reopen View/export last capture to see the saved results.",
+        "menu_options": {
+          "capture_stop": "Stop and view results"
+        }
+      }
+    },
+    "progress": {
+      "preparing_capture": "Preparing the receiver. Please wait.",
+      "receiving": "Ready: press your remote now. Results appear after capture finishes."
+    },
+    "error": {
+      "capture_failed": "Could not start capture. Check connectivity and other capture sessions.",
+      "no_matching_frame": "No matching Daikin frame or Daikin profile not selected.",
+      "confirmation_required": "Explicit confirmation is required before cutting power."
+    },
+    "abort": {
+      "capture_done": "Results saved.",
+      "capture_failed": "Capture did not complete. Reception stopped; reopen options to try again.",
+      "outlet_off_done": "The device acknowledged the outlet power-off command.",
+      "outlet_failed": "The outlet operation did not complete. Check the device state.",
+      "outlet_on_done": "The device acknowledged restoring outlet power."
+    }
+  },
+  "exceptions": {
+    "authentication_failed": {
+      "message": "Telnet authentication failed or the device identity changed."
+    },
+    "read_failed": {
+      "message": "Could not read valid data from P3."
+    },
+    "timer_power_required": {
+      "message": "An off/sleep timer elapsed. Explicitly turn the AC on/off or adopt a current remote capture before changing other settings."
+    },
+    "outlet_confirmation_required": {
+      "message": "Cutting power during AC startup or operation may cause damage. Use integration options → Turn off outlet power, or aqara_p3.turn_off_outlet with confirm_power_cut for automation."
+    },
+    "outlet_running_confirmation_required": {
+      "message": "The AC is recorded as on or load power exceeds 100 W. Cutting power may cause damage. Confirm again, or also set confirm_running: true in automation."
+    },
+    "powerful_mode_required": {
+      "message": "Powerful operation requires cool or heat mode."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "power_w": {
+        "name": "Load power"
+      },
+      "energy_kwh": {
+        "name": "Cumulative energy"
+      },
+      "ac_mode": {
+        "name": "Cached AC mode"
+      },
+      "fan_mode": {
+        "name": "Cached AC fan mode"
+      },
+      "target_temperature": {
+        "name": "Cached AC target temperature"
+      },
+      "chip_temperature": {
+        "name": "Chip temperature"
+      }
+    },
+    "binary_sensor": {
+      "relay_on": {
+        "name": "Outlet power state"
+      },
+      "ac_on": {
+        "name": "Cached AC power state"
+      }
+    },
+    "climate": {
+      "air_conditioner": {
+        "name": "Air conditioner",
+        "state_attributes": {
+          "fan_mode": {
+            "state": {
+              "auto": "Auto",
+              "quiet": "Quiet",
+              "1": "Level 1",
+              "2": "Level 2",
+              "3": "Level 3",
+              "4": "Level 4",
+              "5": "Level 5"
+            }
+          },
+          "swing_mode": {
+            "state": {
+              "off": "Off",
+              "vertical": "Vertical",
+              "horizontal": "Horizontal",
+              "both": "Both axes"
+            }
+          }
+        }
+      }
+    },
+    "switch": {
+      "powerful": {
+        "name": "Powerful"
+      },
+      "rapid": {
+        "name": "Rapid operation"
+      },
+      "coanda": {
+        "name": "Coanda airflow"
+      },
+      "econo": {
+        "name": "Economy"
+      },
+      "outdoor_quiet": {
+        "name": "Outdoor unit quiet"
+      }
+    },
+    "number": {
+      "on_timer": {
+        "name": "On timer"
+      },
+      "off_timer": {
+        "name": "Off timer"
+      },
+      "coanda_sleep": {
+        "name": "Coanda sleep"
+      },
+      "sound_volume": {
+        "name": "Sound volume"
+      }
+    },
+    "button": {
+      "cancel_timers": {
+        "name": "Cancel all timers"
+      },
+      "play_sound": {
+        "name": "Play selected sound"
+      },
+      "stop_sound": {
+        "name": "Stop sound"
+      }
+    },
+    "select": {
+      "dry_offset": {
+        "name": "Dry temperature offset"
+      },
+      "sound": {
+        "name": "Built-in sound"
+      }
+    }
+  },
+  "selector": {
+    "profile": {
+      "options": {
+        "daikin_p3": "Daikin E-Max 7",
+        "capture_only": "Capture only (other remotes)"
+      }
+    }
+  },
+  "services": {
+    "turn_off_outlet": {
+      "name": "Turn off outlet with confirmation",
+      "description": "Cut mains power to the AC. Power loss during startup or operation may cause damage.",
+      "fields": {
+        "confirm_power_cut": {
+          "name": "Confirm power-cut risk",
+          "description": "Must be true, otherwise power-off is refused."
+        },
+        "confirm_running": {
+          "name": "Confirm cutting power when considered running",
+          "description": "Must also be true if the stored AC state is on or the latest load-power reading exceeds 100 W."
+        },
+        "device_id": {
+          "name": "Device",
+          "description": "Select an Aqara P3 or its sound device."
+        }
+      }
+    },
+    "turn_on_outlet": {
+      "name": "Restore outlet power",
+      "description": "Restore mains power to the P3 outlet.",
+      "fields": {
+        "device_id": {
+          "name": "Device",
+          "description": "Select an Aqara P3 or its sound device."
+        }
+      }
+    },
+    "play_sound": {
+      "name": "Play sound",
+      "description": "Play a built-in sound with optional volume, total time limit and repeat count.",
+      "fields": {
+        "device_id": {
+          "name": "Device",
+          "description": "Select an Aqara P3 or its sound device."
+        },
+        "tone": {
+          "name": "Sound",
+          "description": "Uses the selected sound when omitted."
+        },
+        "volume": {
+          "name": "Volume",
+          "description": "0–100. Omit to use the current sound volume."
+        },
+        "stop_after": {
+          "name": "Stop after",
+          "description": "Maximum total playback time in seconds. Ends after the requested repetitions when omitted."
+        },
+        "repeat": {
+          "name": "Playback count",
+          "description": "Total plays, including the first. Ends when the count or time limit is reached."
+        }
+      }
+    },
+    "stop_sound": {
+      "name": "Stop sound",
+      "description": "Stop the current sound and cancel the remaining repetitions.",
+      "fields": {
+        "device_id": {
+          "name": "Device",
+          "description": "Select an Aqara P3 or its sound device."
+        }
+      }
+    }
+  }
+}

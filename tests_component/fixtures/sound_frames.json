@@ -1,0 +1,94 @@
+{
+  "DingDong": {
+    "frames": 91951,
+    "sample_rate": 32000
+  },
+  "Knock": {
+    "frames": 42776,
+    "sample_rate": 32000
+  },
+  "Funny": {
+    "frames": 190589,
+    "sample_rate": 32000
+  },
+  "Ring": {
+    "frames": 166348,
+    "sample_rate": 32000
+  },
+  "MiMix": {
+    "frames": 240162,
+    "sample_rate": 32000
+  },
+  "Enthusiastic": {
+    "frames": 287058,
+    "sample_rate": 32000
+  },
+  "GuitarClassic": {
+    "frames": 253607,
+    "sample_rate": 32000
+  },
+  "IceWorldPiano": {
+    "frames": 360085,
+    "sample_rate": 32000
+  },
+  "LeisureTime": {
+    "frames": 305783,
+    "sample_rate": 32000
+  },
+  "Childhood": {
+    "frames": 279176,
+    "sample_rate": 32000
+  },
+  "MorningStreamlet": {
+    "frames": 270084,
+    "sample_rate": 32000
+  },
+  "MusicBox": {
+    "frames": 320044,
+    "sample_rate": 32000
+  },
+  "Orange": {
+    "frames": 312491,
+    "sample_rate": 32000
+  },
+  "Thinker": {
+    "frames": 209314,
+    "sample_rate": 32000
+  },
+  "PoliceCar_1": {
+    "frames": 210542,
+    "sample_rate": 32000
+  },
+  "PoliceCar_2": {
+    "frames": 418915,
+    "sample_rate": 32000
+  },
+  "Accident": {
+    "frames": 152839,
+    "sample_rate": 32000
+  },
+  "CountDown": {
+    "frames": 188039,
+    "sample_rate": 32000
+  },
+  "Ghost": {
+    "frames": 223190,
+    "sample_rate": 32000
+  },
+  "Gun": {
+    "frames": 236565,
+    "sample_rate": 32000
+  },
+  "Battle": {
+    "frames": 240462,
+    "sample_rate": 32000
+  },
+  "AirRaid": {
+    "frames": 340520,
+    "sample_rate": 32000
+  },
+  "Dog": {
+    "frames": 134339,
+    "sample_rate": 32000
+  }
+}

@@ -1,0 +1,318 @@
+{
+  "title": "Aqara P3",
+  "config": {
+    "step": {
+      "user": {
+        "title": "连接 Aqara P3",
+        "description": "通过局域网连接 P3，用户名为 admin。空调默认使用本项目标定的大金协议；其他遥控器请在选项中选择仅抓取。",
+        "data": {
+          "host": "设备 IP 地址",
+          "password": "Telnet 密码"
+        }
+      },
+      "reconfigure": {
+        "title": "连接 Aqara P3",
+        "description": "通过局域网连接 P3，用户名为 admin。空调默认使用本项目标定的大金协议；其他遥控器请在选项中选择仅抓取。",
+        "data": {
+          "host": "设备 IP 地址",
+          "password": "Telnet 密码"
+        }
+      },
+      "reauth_confirm": {
+        "title": "连接 Aqara P3",
+        "description": "通过局域网连接 P3，用户名为 admin。空调默认使用本项目标定的大金协议；其他遥控器请在选项中选择仅抓取。",
+        "data": {
+          "host": "设备 IP 地址",
+          "password": "Telnet 密码"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Telnet 登录失败，请检查 admin 的密码。",
+      "cannot_connect": "设备不可达或读取超时。",
+      "unsupported_device": "暂不支持这个设备型号。",
+      "invalid_data": "IP 地址无效，或设备返回了不符合预期的数据。"
+    },
+    "abort": {
+      "already_configured": "这个 P3 已经添加。",
+      "wrong_device": "该地址对应的不是原来配对的设备。",
+      "reauth_successful": "密码已更新。",
+      "reconfigure_successful": "配置已更新。"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Aqara P3",
+        "menu_options": {
+          "settings": "控制与传感器设置",
+          "capture": "抓取遥控器报文",
+          "capture_result": "查看／导出最近抓取",
+          "outlet_off": "关闭插座电源",
+          "outlet_on": "恢复插座供电"
+        }
+      },
+      "settings": {
+        "title": "设置",
+        "description": "选择室温传感器和遥控器协议，并设置设备读取间隔。",
+        "data": {
+          "poll_interval": "读取间隔（秒）",
+          "profile": "遥控器协议",
+          "temperature_entity": "室温传感器（可选）"
+        }
+      },
+      "capture": {
+        "title": "红外抓取",
+        "description": "选择抓取时长，启动后等待接收界面，再对准 P3 按遥控器。最长 5 分钟，期间暂停控制。",
+        "data": {
+          "seconds": "抓取时长（秒）"
+        }
+      },
+      "capture_result": {
+        "title": "抓取结果",
+        "description": "已保存 {count} 条波形，异常帧 {errors} 条。可复制下方 JSON，或在集成菜单下载诊断。勾选后将最近一次遥控器设置同步到 HA 空调卡片。",
+        "data": {
+          "export": "导出 JSON",
+          "adopt": "同步最近一次遥控器设置"
+        }
+      },
+      "outlet_off": {
+        "title": "关闭插座电源：风险确认",
+        "description": "这会直接切断空调供电。空调启动或运行时断电可能造成损伤；建议先用“空调”实体关机，确认停止后再断电。HA 的记录不能保证空调实际状态。",
+        "data": {
+          "confirm": "我已了解风险，确认切断插座电源"
+        }
+      },
+      "outlet_off_running": {
+        "title": "再次确认：空调可能正在运行",
+        "description": "保存的空调状态为开启，或最近读取的负载功率大于 100 W，任一情况都按运行中处理。直接断电可能造成损伤。建议取消并先关闭空调。确认后将立即切断插座电源。",
+        "data": {
+          "confirm": "我仍确认强制断电"
+        }
+      },
+      "capturing": {
+        "title": "正在接收遥控器报文",
+        "description": "现在可以对准 P3 按遥控器。点击“停止并查看结果”完成抓取。到达设定时长也会自动保存；关闭窗口会结束采集，结果可在“查看／导出最近抓取”中找到。",
+        "menu_options": {
+          "capture_stop": "停止并查看结果"
+        }
+      }
+    },
+    "progress": {
+      "preparing_capture": "正在准备接收，请稍候。",
+      "receiving": "已就绪：现在可以按遥控器，抓取结束后显示结果。"
+    },
+    "error": {
+      "capture_failed": "无法启动抓取，请确认设备在线且没有其他抓取任务。",
+      "no_matching_frame": "没有可采用的大金报文，或尚未选择大金协议。",
+      "confirmation_required": "必须明确勾选确认才能断电。"
+    },
+    "abort": {
+      "capture_done": "结果已保存。",
+      "capture_failed": "抓取未完成，已停止接收。可重新打开选项再试。",
+      "outlet_off_done": "插座断电命令已获设备确认。",
+      "outlet_failed": "插座操作未完成，请检查设备状态。",
+      "outlet_on_done": "插座供电命令已获设备确认。"
+    }
+  },
+  "exceptions": {
+    "authentication_failed": {
+      "message": "Telnet 认证失败或设备标识发生变化。"
+    },
+    "read_failed": {
+      "message": "无法读取 P3 的有效数据。"
+    },
+    "timer_power_required": {
+      "message": "定时关机或康达舒睡已到期，空调实际开关状态未确认。请先明确开机／关机，或抓取并采用当前遥控器状态，再调整其他功能。"
+    },
+    "outlet_confirmation_required": {
+      "message": "空调启动或运行时直接断电可能造成损伤。请到集成选项 → 关闭插座电源确认风险；自动化请使用 aqara_p3.turn_off_outlet 并设置 confirm_power_cut。"
+    },
+    "outlet_running_confirmation_required": {
+      "message": "空调记录为开启或负载功率大于 100 W，直接断电可能造成损伤。必须再次确认；自动化还需设置 confirm_running: true。"
+    },
+    "powerful_mode_required": {
+      "message": "强力运转仅适用于制冷或制热模式。"
+    }
+  },
+  "entity": {
+    "sensor": {
+      "power_w": {
+        "name": "负载功率"
+      },
+      "energy_kwh": {
+        "name": "累计电量"
+      },
+      "ac_mode": {
+        "name": "空调缓存模式"
+      },
+      "fan_mode": {
+        "name": "空调缓存风速"
+      },
+      "target_temperature": {
+        "name": "空调缓存目标温度"
+      },
+      "chip_temperature": {
+        "name": "芯片温度"
+      }
+    },
+    "binary_sensor": {
+      "relay_on": {
+        "name": "插座电源状态"
+      },
+      "ac_on": {
+        "name": "空调缓存开关状态"
+      }
+    },
+    "climate": {
+      "air_conditioner": {
+        "name": "空调",
+        "state_attributes": {
+          "fan_mode": {
+            "state": {
+              "auto": "自动",
+              "quiet": "静音",
+              "1": "1 档",
+              "2": "2 档",
+              "3": "3 档",
+              "4": "4 档",
+              "5": "5 档"
+            }
+          },
+          "swing_mode": {
+            "state": {
+              "off": "关闭",
+              "vertical": "上下",
+              "horizontal": "左右",
+              "both": "立体气流"
+            }
+          }
+        }
+      }
+    },
+    "switch": {
+      "powerful": {
+        "name": "强力运转"
+      },
+      "rapid": {
+        "name": "极速运转"
+      },
+      "coanda": {
+        "name": "康达气流"
+      },
+      "econo": {
+        "name": "省电运转"
+      },
+      "outdoor_quiet": {
+        "name": "室外机静音"
+      }
+    },
+    "number": {
+      "on_timer": {
+        "name": "定时开机"
+      },
+      "off_timer": {
+        "name": "定时关机"
+      },
+      "coanda_sleep": {
+        "name": "康达舒睡"
+      },
+      "sound_volume": {
+        "name": "音效音量"
+      }
+    },
+    "button": {
+      "cancel_timers": {
+        "name": "取消全部定时"
+      },
+      "play_sound": {
+        "name": "播放所选音效"
+      },
+      "stop_sound": {
+        "name": "停止音效"
+      }
+    },
+    "select": {
+      "dry_offset": {
+        "name": "除湿温度微调"
+      },
+      "sound": {
+        "name": "内置音效"
+      }
+    }
+  },
+  "selector": {
+    "profile": {
+      "options": {
+        "daikin_p3": "大金 E-Max 7",
+        "capture_only": "仅抓取（其他遥控器）"
+      }
+    }
+  },
+  "services": {
+    "turn_off_outlet": {
+      "name": "确认后关闭插座电源",
+      "description": "直接切断空调供电，启动或运行时断电可能造成损伤。",
+      "fields": {
+        "confirm_power_cut": {
+          "name": "确认断电风险",
+          "description": "必须为 true；否则拒绝断电。"
+        },
+        "confirm_running": {
+          "name": "确认在判定运行中时断电",
+          "description": "空调记录为开启或最近读取的负载功率大于 100 W 时，还必须为 true。"
+        },
+        "device_id": {
+          "name": "设备",
+          "description": "选择 Aqara P3 或其声音设备。"
+        }
+      }
+    },
+    "turn_on_outlet": {
+      "name": "恢复插座供电",
+      "description": "恢复 P3 插座供电。",
+      "fields": {
+        "device_id": {
+          "name": "设备",
+          "description": "选择 Aqara P3 或其声音设备。"
+        }
+      }
+    },
+    "play_sound": {
+      "name": "播放音效",
+      "description": "播放内置音效，可设置音量、停止时间和循环次数。",
+      "fields": {
+        "device_id": {
+          "name": "设备",
+          "description": "选择 Aqara P3 或其声音设备。"
+        },
+        "tone": {
+          "name": "音效",
+          "description": "留空使用当前选择的内置音效。"
+        },
+        "volume": {
+          "name": "音量",
+          "description": "0～100；留空使用当前音效音量。"
+        },
+        "stop_after": {
+          "name": "停止时间",
+          "description": "开始播放后最多持续的秒数；留空则播完指定次数。"
+        },
+        "repeat": {
+          "name": "循环次数",
+          "description": "总播放次数，默认 1 次；次数或停止时间先达到时结束。"
+        }
+      }
+    },
+    "stop_sound": {
+      "name": "停止音效",
+      "description": "停止当前音效并取消后续循环。",
+      "fields": {
+        "device_id": {
+          "name": "设备",
+          "description": "选择 Aqara P3 或其声音设备。"
+        }
+      }
+    }
+  }
+}

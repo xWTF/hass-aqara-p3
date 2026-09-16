@@ -48,6 +48,48 @@ async def test_firmware_cache_never_overwrites_command(controller):
     assert controller.coordinator.data["ac_mode"] == "cool"
 
 
+@pytest.mark.parametrize(
+    ("initial", "enabled", "expected"),
+    [
+        ({"econo": True, "outdoor_quiet": True}, "rapid", {"rapid"}),
+        ({"rapid": True}, "econo", {"econo"}),
+        ({"rapid": True}, "outdoor_quiet", {"outdoor_quiet"}),
+        ({"rapid": True}, "powerful", {"powerful"}),
+        ({"econo": True, "outdoor_quiet": True}, "powerful", {"powerful"}),
+        ({"econo": True}, "outdoor_quiet", {"econo", "outdoor_quiet"}),
+        ({"outdoor_quiet": True}, "econo", {"econo", "outdoor_quiet"}),
+        ({"powerful": True}, "rapid", {"rapid"}),
+    ],
+)
+async def test_feature_conflicts_sent_and_saved_in_one_command(
+    controller, initial, enabled, expected
+):
+    from custom_components.aqara_p3.protocol.profiles.daikin_p3 import DaikinP3
+
+    await controller.apply(power=True, mode="cool", **initial)
+    controller.coordinator.control.send.reset_mock()
+    await controller.apply(**{enabled: True})
+    controller.coordinator.control.send.assert_awaited_once()
+    sent = controller.coordinator.control.send.call_args.args[0]
+    # Check the actual encoded flags and checksum, not only entity state.
+    decoded = DaikinP3.from_hex(sent.raw.hex())
+    features = {"powerful", "rapid", "econo", "outdoor_quiet"}
+    assert {key for key in features if decoded.feature(key)} == expected
+    assert controller.state == sent
+    assert controller.store.async_save.call_args.args[0]["state"] == sent.raw.hex()
+    assert (controller.powerful_deadline is not None) == ("powerful" in expected)
+
+
+async def test_disabling_boost_does_not_restore_cancelled_features(controller):
+    await controller.apply(power=True, econo=True, outdoor_quiet=True)
+    await controller.apply(rapid=True)
+    await controller.apply(rapid=False)
+    assert not any(
+        controller.state.feature(key)
+        for key in ("powerful", "rapid", "econo", "outdoor_quiet")
+    )
+
+
 async def test_error_is_not_retried_and_uncertainty_persisted(controller):
     controller.coordinator.control.send.side_effect = CommandError("timeout")
     with pytest.raises(HomeAssistantError):

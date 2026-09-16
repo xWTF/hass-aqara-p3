@@ -105,6 +105,29 @@ def test_feature_preserves_other_fields_and_mutual_boost():
     assert changed.changed(econo=True).feature("powerful") is False
 
 
+@pytest.mark.parametrize(
+    ("changes", "expected"),
+    [
+        (
+            {"powerful": True, "rapid": True, "econo": True, "outdoor_quiet": True},
+            {"powerful"},
+        ),
+        (
+            {"outdoor_quiet": True, "econo": True, "rapid": True, "powerful": True},
+            {"powerful"},
+        ),
+        ({"rapid": True, "econo": True, "outdoor_quiet": True}, {"rapid"}),
+    ],
+)
+def test_conflicting_batch_has_explicit_priority(changes, expected):
+    state = DaikinP3.default().changed(**changes)
+    assert {
+        key
+        for key in ("powerful", "rapid", "econo", "outdoor_quiet")
+        if state.feature(key)
+    } == expected
+
+
 def test_capture_fragmentation_crc_and_unknown_protocol():
     import struct
 

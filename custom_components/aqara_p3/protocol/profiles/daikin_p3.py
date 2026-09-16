@@ -202,17 +202,20 @@ class DaikinP3:
             if type(changes[key]) is not bool:
                 raise InvalidData("Invalid feature")
             b[index] = (b[index] & ~mask) | (mask if changes[key] else 0)
-            # Captured Powerful activation cancels Rapid; conservatively keep
-            # mutually exclusive boost/economy/quiet choices consistent.
-            if changes[key] and key in ("powerful", "rapid", "econo", "outdoor_quiet"):
-                others = (
-                    ("rapid", "econo", "outdoor_quiet")
-                    if key == "powerful"
-                    else ("powerful",)
-                )
-                for other in others:
-                    oi, om = FEATURES[other]
-                    b[oi] &= ~om
+        # Resolve the complete command before its checksum/transmission. Batch
+        # requests use explicit priority: Powerful, Rapid, then economy/quiet.
+        # Economy and outdoor quiet may coexist; disabling never restores flags.
+        if changes.get("powerful") is True:
+            disabled = ("rapid", "econo", "outdoor_quiet")
+        elif changes.get("rapid") is True:
+            disabled = ("powerful", "econo", "outdoor_quiet")
+        elif changes.get("econo") is True or changes.get("outdoor_quiet") is True:
+            disabled = ("powerful", "rapid")
+        else:
+            disabled = ()
+        for other in disabled:
+            index, mask = FEATURES[other]
+            b[index] &= ~mask
         b[-1] = sum(b[:-1]) & 255
         return type(self)(bytes(b))
 

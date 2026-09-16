@@ -57,12 +57,8 @@ async def test_native_platform_setup_and_unload(hass, identity, snapshot, monkey
     assert entry.state == ConfigEntryState.LOADED
     registry = er.async_get(hass)
     entities = er.async_entries_for_config_entry(registry, entry.entry_id)
-    assert len(entities) == 23
+    assert len(entities) == 19
     disabled = {
-        "ac_on",
-        "ac_mode",
-        "fan_mode",
-        "target_temperature",
         "chip_temperature",
         "on_timer",
         "off_timer",
@@ -181,6 +177,10 @@ async def test_native_platform_setup_and_unload(hass, identity, snapshot, monkey
             ("number", "dry_offset"),
             ("button", "stop_capture"),
             ("alarm_control_panel", "security_alarm"),
+            ("sensor", "ac_mode"),
+            ("sensor", "fan_mode"),
+            ("sensor", "target_temperature"),
+            ("binary_sensor", "ac_on"),
         ]
     ]
     assert await hass.config_entries.async_reload(entry.entry_id)

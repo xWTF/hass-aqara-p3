@@ -14,6 +14,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from .ac_controller import ACController
 from .audio import AudioCoordinator
 from .const import CONF_POLL_INTERVAL, DEFAULT_POLL_INTERVAL, DOMAIN, UPDATE_TIMEOUT
+from .energy import EnergyCounter
 from .local_mode import LocalModeController
 from .protocol.config import DeviceConfig
 from .protocol.control import P3Control
@@ -59,6 +60,8 @@ class P3Coordinator(DataUpdateCoordinator[dict]):
         self.ac = ACController(self, entry)
         self.audio = AudioCoordinator(hass, entry, self)
         self.local_mode = LocalModeController(self, entry)
+        self.energy = EnergyCounter(hass, self.expected_uid)
+        self.energy_error = None
 
     async def _async_update_data(self):
         task = asyncio.current_task()
@@ -70,10 +73,25 @@ class P3Coordinator(DataUpdateCoordinator[dict]):
                 raise AuthenticationError("设备标识改变")
             self.identity = snapshot.identity
             self.last_cache_read = snapshot.acquired_at
+            values = dict(snapshot.values)
+            try:
+                async with asyncio.timeout(8):
+                    sample = await self.control.read_energy()
+                    values["energy_kwh"] = await self.energy.update(sample)
+                values["energy_source"] = "firmware_integrator"
+                self.energy_error = None
+            except (P3Error, OSError, TimeoutError, ValueError) as error:
+                # Energy availability must not interrupt IR/audio or discard
+                # independent power and relay readings.
+                self.energy_error = (
+                    str(error) if isinstance(error, P3Error) else type(error).__name__
+                )
+                values["energy_kwh"] = None
+                values["energy_source"] = "unavailable"
             await self.ac.expire_timers()
             # Cache acquisition timestamp is not a hardware measurement time.
             # Unchanged readings do not force all entity states to be rewritten.
-            return snapshot.values
+            return values
         except AuthenticationError:
             await self.device.close()
             raise ConfigEntryAuthFailed(
@@ -101,3 +119,4 @@ class P3Coordinator(DataUpdateCoordinator[dict]):
             task.cancel()
             await asyncio.gather(task, return_exceptions=True)
         await self.device.close()
+        await self.energy.shutdown()

@@ -131,26 +131,44 @@ class Snapshot:
         ac_function,
         chip_temperature,
         load_power=None,
+        relay_state=None,
     ):
-        p = properties(power, 12)
-        a = properties(ac, 10)
-        f = properties(fan, 18)
-        r = properties(relay, 14)
-        af = properties(ac_function, 11)
+        groups = {
+            "power": (power, 12),
+            "ac": (ac, 10),
+            "fan": (fan, 18),
+            "relay": (relay, 14),
+            "ac_function": (ac_function, 11),
+        }
+        missing = [name for name, (raw, _) in groups.items() if raw is None]
+        decoded = {
+            name: None if raw is None else properties(raw, siid)
+            for name, (raw, siid) in groups.items()
+        }
+
+        def cached(name, piid, validate):
+            props = decoded[name]
+            return None if props is None else validate(props[piid])
+
         try:
-            on = boolean(a[1])
-            configured_mode = enum_value(a[2], MIOT_MODES)
+            on = cached("ac", 1, boolean)
+            configured_mode = cached("ac", 2, lambda v: enum_value(v, MIOT_MODES))
             values = {
-                "power_w": finite_number(p[2], 0, 5000),
-                "power_source": "firmware_cache",
-                "energy_kwh": finite_number(p[1], 0, 1e9),
-                "relay_on": boolean(r[1]),
+                "power_w": cached("power", 2, lambda v: finite_number(v, 0, 5000)),
+                "power_source": "unavailable" if power is None else "firmware_cache",
+                "energy_kwh": cached(
+                    "power",
+                    1,
+                    lambda v: None if v is None else finite_number(v, 0, 1e9),
+                ),
+                "relay_on": cached("relay", 1, boolean),
                 "ac_on": on,
-                "ac_mode": configured_mode if on else "off",
-                "fan_mode": enum_value(f[2], FAN_MODES),
-                "vertical_swing": boolean(f[4]),
-                "native_ac_state": af[9],
-                "source": "firmware_cache",
+                "ac_mode": None if on is None else configured_mode if on else "off",
+                "fan_mode": cached("fan", 2, lambda v: enum_value(v, FAN_MODES)),
+                "vertical_swing": cached("fan", 4, boolean),
+                "native_ac_state": cached("ac_function", 9, lambda v: v),
+                "source": "firmware_cache_partial" if missing else "firmware_cache",
+                "missing_resources": missing,
                 "control_enabled": False,
             }
             # mha_ir writes this property before mha_master synchronizes its
@@ -163,16 +181,30 @@ class Snapshot:
                 values["power_w"] = finite_number(watts, 0, 5000)
                 values["power_source"] = "device_property"
                 values["source"] = "firmware_cache_and_device_properties"
+            if relay_state is not None and relay_state.strip():
+                relay_value = legacy_hex_cstring(relay_state.strip())
+                if relay_value not in ("0", "1"):
+                    raise InvalidData("原厂插座状态无效")
+                values["relay_on"] = relay_value == "1"
+                values["relay_source"] = "device_property"
+            else:
+                values["relay_source"] = (
+                    "unavailable" if relay is None else "firmware_cache"
+                )
             # Fan-only and dry may have no meaningful setpoint. Do not expose
             # the vendor's sentinel 0 as a room or target temperature.
-            target = a.get(4)
+            target = cached("ac", 4, lambda v: v)
             values["target_temperature"] = (
-                None if target == 0 else finite_number(target, 10, 40)
+                None if target is None or target == 0 else finite_number(target, 10, 40)
             )
-            if not isinstance(af[9], str) or not re.fullmatch(
-                r"[PMTSDL0-9_]{1,64}", af[9]
-            ):
-                raise InvalidData("原厂空调状态字符串无效")
+            if ac_function is not None:
+                native = values["native_ac_state"]
+                if native == "":
+                    values["native_ac_state"] = None
+                elif not isinstance(native, str) or not re.fullmatch(
+                    r"[PMTSDL0-9_]{1,64}", native
+                ):
+                    raise InvalidData("原厂空调状态字符串无效")
             if chip_temperature.strip():
                 try:
                     temperature = float(chip_temperature)

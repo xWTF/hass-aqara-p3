@@ -34,6 +34,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: P3ConfigEntry) -> bool:
             ("number", "dry_offset"),
             ("button", "stop_capture"),
             ("alarm_control_panel", "security_alarm"),
+            ("sensor", "ac_mode"),
+            ("sensor", "fan_mode"),
+            ("sensor", "target_temperature"),
+            ("binary_sensor", "ac_on"),
         ):
             old_entity = registry.async_get_entity_id(
                 platform, DOMAIN, f"{entry.unique_id}_{key}"

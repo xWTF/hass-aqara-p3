@@ -70,6 +70,106 @@ def test_power_property_takes_precedence_over_slow_json_cache(identity, raw_snap
     assert state.values["power_w"] == 0
 
 
+def test_factory_reset_caches_are_unknown_and_live_power_still_works(identity):
+    raw = dict.fromkeys(("power", "ac", "fan", "relay", "ac_function"))
+    state = Snapshot.decode(identity, **raw, chip_temperature="43", load_power="")
+    for key in (
+        "power_w",
+        "energy_kwh",
+        "relay_on",
+        "ac_on",
+        "ac_mode",
+        "fan_mode",
+        "target_temperature",
+        "native_ac_state",
+    ):
+        assert state.values[key] is None
+    assert state.values["chip_temperature"] == 43
+    assert state.values["missing_resources"] == list(raw)
+    assert state.values["power_source"] == "unavailable"
+    state = Snapshot.decode(identity, **raw, chip_temperature="43", load_power="125")
+    assert state.values["power_w"] == 125
+    assert state.values["energy_kwh"] is None
+
+
+def test_cache_can_reappear_without_restart(identity, raw_snapshot):
+    raw = {**raw_snapshot, "power": None, "ac_function": None}
+    state = Snapshot.decode(identity, **raw)
+    assert state.values["power_w"] is None
+    assert state.values["relay_on"] is True
+    assert state.values["ac_mode"] == "cool"
+    state = Snapshot.decode(identity, **raw_snapshot)
+    assert state.values["power_w"] == 196
+    assert state.values["missing_resources"] == []
+
+
+@pytest.mark.parametrize("raw, expected", [("3100", True), ("3000", False)])
+def test_live_relay_property_without_cache(identity, raw_snapshot, raw, expected):
+    state = Snapshot.decode(
+        identity, **{**raw_snapshot, "relay": None}, relay_state=raw
+    )
+    assert state.values["relay_on"] is expected
+    assert state.values["relay_source"] == "device_property"
+
+
+@pytest.mark.parametrize("raw", ["0", "1", "3200", "310000", "junk"])
+def test_invalid_live_relay_is_not_a_boolean(identity, raw_snapshot, raw):
+    with pytest.raises(InvalidData):
+        Snapshot.decode(identity, **raw_snapshot, relay_state=raw)
+
+
+def test_present_but_corrupt_cache_is_not_treated_as_missing(identity, raw_snapshot):
+    with pytest.raises(InvalidData):
+        Snapshot.decode(identity, **{**raw_snapshot, "power": ""})
+    with pytest.raises(InvalidData):
+        Snapshot.decode(
+            identity, **{**raw_snapshot, "power": '{"siid":12,"property":[]}'}
+        )
+
+
+def test_uninitialized_energy_and_native_code_are_unknown(identity, raw_snapshot):
+    power = json.loads(raw_snapshot["power"])
+    power["property"][0]["value"] = None
+    function = json.loads(raw_snapshot["ac_function"])
+    for prop in function["property"]:
+        if prop["piid"] == 9:
+            prop["value"] = ""
+    state = Snapshot.decode(
+        identity,
+        **{
+            **raw_snapshot,
+            "power": json.dumps(power),
+            "ac_function": json.dumps(function),
+        },
+    )
+    assert state.values["energy_kwh"] is None
+    assert state.values["power_w"] == 196
+    assert state.values["native_ac_state"] is None
+
+
+async def test_missing_files_do_not_abort_the_device_snapshot(identity):
+    from unittest.mock import AsyncMock
+
+    from custom_components.aqara_p3.protocol.device import ReadOnlyDevice
+    from custom_components.aqara_p3.protocol.errors import ResourceMissing
+    from custom_components.aqara_p3.protocol.telnet import CACHE_RESOURCES, Resource
+
+    def read(resource):
+        if resource in CACHE_RESOURCES:
+            raise ResourceMissing("cache not initialized")
+        return "43" if resource == Resource.CHIP_TEMPERATURE else ""
+
+    transport = AsyncMock()
+    transport.connected = True
+    transport.read.side_effect = read
+    device = ReadOnlyDevice(transport)
+    device.identity = identity
+    state = await device.snapshot()
+    assert state.values["chip_temperature"] == 43
+    assert len(state.values["missing_resources"]) == 5
+    assert transport.read.await_count == 8
+
+
 @pytest.mark.parametrize("raw", [None, "", " \n"])
 def test_missing_power_property_uses_labelled_cache(identity, raw_snapshot, raw):
     state = Snapshot.decode(identity, **raw_snapshot, load_power=raw)
@@ -93,6 +193,7 @@ async def test_snapshot_reads_live_power_property(identity, raw_snapshot):
 
     responses = {Resource(k): v for k, v in raw_snapshot.items()}
     responses[Resource.LOAD_POWER] = "321"
+    responses[Resource.RELAY_STATE] = ""
     transport = AsyncMock()
     transport.connected = True
     transport.read.side_effect = lambda resource: responses[resource]

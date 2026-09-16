@@ -157,15 +157,6 @@
       "energy_kwh": {
         "name": "累计电量"
       },
-      "ac_mode": {
-        "name": "空调缓存模式"
-      },
-      "fan_mode": {
-        "name": "空调缓存风速"
-      },
-      "target_temperature": {
-        "name": "空调缓存目标温度"
-      },
       "chip_temperature": {
         "name": "芯片温度"
       }
@@ -173,9 +164,6 @@
     "binary_sensor": {
       "relay_on": {
         "name": "插座电源状态"
-      },
-      "ac_on": {
-        "name": "空调缓存开关状态"
       }
     },
     "climate": {

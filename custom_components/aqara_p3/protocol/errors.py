@@ -18,6 +18,10 @@ class InvalidData(P3Error):
     pass
 
 
+class ResourceMissing(InvalidData):
+    """An optional firmware cache has not been created yet."""
+
+
 class UnsupportedDevice(P3Error):
     pass
 

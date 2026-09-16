@@ -6,7 +6,6 @@ from homeassistant.components.binary_sensor import (
     BinarySensorEntity,
     BinarySensorEntityDescription,
 )
-from homeassistant.const import EntityCategory
 
 from .entity import P3Entity
 
@@ -16,13 +15,6 @@ DESCRIPTIONS = (
         key="relay_on",
         translation_key="relay_on",
         device_class=BinarySensorDeviceClass.POWER,
-    ),
-    BinarySensorEntityDescription(
-        key="ac_on",
-        translation_key="ac_on",
-        device_class=BinarySensorDeviceClass.POWER,
-        entity_category=EntityCategory.DIAGNOSTIC,
-        entity_registry_enabled_default=False,
     ),
 )
 

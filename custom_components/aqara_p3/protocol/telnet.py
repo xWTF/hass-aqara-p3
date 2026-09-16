@@ -16,7 +16,7 @@ from enum import StrEnum
 import telnetlib3
 
 from .config import DeviceConfig
-from .errors import AuthenticationError, ConnectionLost, InvalidData
+from .errors import AuthenticationError, ConnectionLost, InvalidData, ResourceMissing
 
 
 class Resource(StrEnum):
@@ -30,6 +30,7 @@ class Resource(StrEnum):
     AC_FUNCTION = "ac_function"
     FAN = "fan"
     RELAY = "relay"
+    RELAY_STATE = "relay_state"
     CHIP_TEMPERATURE = "chip_temperature"
     CODEBOOK = "codebook"
 
@@ -45,9 +46,16 @@ COMMANDS = {
     Resource.AC_FUNCTION: "cat /data/alarm/prop-data/ac-function-data.json",
     Resource.FAN: "cat /data/alarm/prop-data/fan-control-data.json",
     Resource.RELAY: "cat /data/alarm/prop-data/switch-data.json",
+    Resource.RELAY_STATE: "getprop persist.app.ir.relay_s",
     Resource.CHIP_TEMPERATURE: "getprop sys.chip_temperature",
     Resource.CODEBOOK: "busybox base64 /data/storage/irfile.tmp_success",
 }
+CACHE_RESOURCES = frozenset(
+    (Resource.POWER, Resource.AC, Resource.AC_FUNCTION, Resource.FAN, Resource.RELAY)
+)
+for _resource in CACHE_RESOURCES:
+    _path = COMMANDS[_resource].removeprefix("cat ")
+    COMMANDS[_resource] = f"if [ -e {_path} ]; then cat {_path}; else (exit 44); fi"
 PROMPT = re.compile(r"(?:^|\n)(?:[^\n]{0,100} )?[#$] $")
 LOGIN = re.compile(r"(?:login|username):\s*$", re.IGNORECASE)
 PASSWORD = re.compile(r"password:\s*$", re.IGNORECASE)
@@ -157,25 +165,37 @@ class TelnetReader:
                 # Separate stdout markers avoid mistaking '# ' in shell scripts
                 # or file contents for the real prompt. These only print text.
                 trailer = "printf '\\n" + marker + ':%s\\n\' "$?"'
+                begin = re.compile(r"(?:^|\n)" + marker + r":BEGIN\n")
+                command_line = f"printf '\\n{marker}:BEGIN\\n'; {cmd}"
                 done = re.compile(r"(?:^|\n)" + marker + r":([0-9]+)\n")
                 cap = 2_000_000 if resource == Resource.CODEBOOK else 65536
                 timeout = (
                     25 if resource == Resource.CODEBOOK else self.config.command_timeout
                 )
                 async with asyncio.timeout(timeout):
-                    await self._send_line(cmd)
+                    await self._send_line(command_line)
                     await self._send_line(trailer)
                     _, result = await self._until([done], limit=cap)
                     await self._until([PROMPT], limit=8192)
                 match = done.search(result)
+                start = begin.search(result)
+                if start is None:
+                    raise InvalidData("设备响应缺少起始标记")
                 code = int(match[1])
-                result = result[: match.start()]
+                # The complete command echo precedes BEGIN, including any
+                # terminal wrapping of a long command across multiple lines.
+                result = result[start.end() : match.start()]
                 lines = result.splitlines()
                 # Ignore exact echoed commands, never arbitrary matching values.
                 lines = [x for x in lines if x not in (cmd, trailer, "# " + trailer)]
+                if code == 44 and resource in CACHE_RESOURCES:
+                    raise ResourceMissing(f"设备尚未生成 {resource.value} 缓存")
                 if code:
                     raise InvalidData(f"设备无法读取 {resource.value}，退出码 {code}")
                 return ANSI.sub("", "\n".join(lines)).strip("\n")
+            except ResourceMissing:
+                # The framed response was complete; reuse the healthy shell.
+                raise
             except BaseException:
                 # Timeout/cancellation discards the stream. Late bytes must not
                 # be consumed as the next request's answer.

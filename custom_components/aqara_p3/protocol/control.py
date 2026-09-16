@@ -290,6 +290,29 @@ class P3Control:
         )
         return {(p["siid"], p["piid"]): p["value"] for p in reply["result"]}
 
+    async def read_energy(self):
+        """Read the native integrator without invoking or stopping the IR service."""
+        async with self._lock:
+            try:
+                await self._prepare(self.session)
+                hashes = await self.session.run(
+                    "sha256sum /bin/mha_ir /lib/libha_ir.so"
+                )
+                expected = {
+                    "/bin/mha_ir": "8ebc70f32f973265533129f02de7d791da518a4911eb2f26a4c76fed59ed6ffd",
+                    "/lib/libha_ir.so": "d6cd8c88a4cb94438fce22f94e20cdce504d56508f6a02d94fc9475ac7e595e7",
+                }
+                found = {}
+                for line in hashes.splitlines():
+                    fields = line.split()
+                    if len(fields) == 2:
+                        found[fields[1]] = fields[0]
+                if found != expected:
+                    raise InvalidData("电量读取不支持当前原厂程序版本")
+                return json.loads(await self.session.run(f"{REMOTE} energy"))
+            finally:
+                await self.session.close()
+
     async def audio_write(self, siid, piid, value):
         # Only expose investigated operations; never arbitrary MIOT writes.
         if (siid, piid) == (5, 2):

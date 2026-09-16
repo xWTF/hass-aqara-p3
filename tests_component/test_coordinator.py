@@ -8,7 +8,7 @@ import pytest
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 
 from custom_components.aqara_p3.coordinator import P3Coordinator
-from custom_components.aqara_p3.protocol.errors import AuthenticationError
+from custom_components.aqara_p3.protocol.errors import AuthenticationError, InvalidData
 
 
 async def test_refresh_native_entities_and_diagnostics(hass, config_entry, snapshot):
@@ -31,7 +31,8 @@ async def test_refresh_native_entities_and_diagnostics(hass, config_entry, snaps
         assert sensors["energy_kwh"].native_value == 0.26
         assert binary["relay_on"].is_on is True
         assert sensors["chip_temperature"].entity_registry_enabled_default is False
-        assert len(sensors) + len(binary) == 8
+        assert set(sensors) == {"power_w", "energy_kwh", "chip_temperature"}
+        assert set(binary) == {"relay_on"}
         config_entry.runtime_data = coordinator
         diag = await async_get_config_entry_diagnostics(hass, config_entry)
         assert "secret" not in str(diag)
@@ -75,6 +76,26 @@ async def test_auth_failure_requests_reauth(hass, config_entry):
     try:
         with pytest.raises(ConfigEntryAuthFailed):
             await coordinator.async_config_entry_first_refresh()
+    finally:
+        await coordinator.async_shutdown()
+
+
+async def test_energy_failure_keeps_power_and_controls_available(
+    hass, config_entry, snapshot
+):
+    coordinator = P3Coordinator(hass, config_entry)
+    coordinator.device = AsyncMock()
+    coordinator.device.snapshot.return_value = snapshot
+    coordinator.control.read_energy = AsyncMock(
+        side_effect=InvalidData("unsupported firmware")
+    )
+    try:
+        await coordinator.async_config_entry_first_refresh()
+        assert coordinator.last_update_success
+        assert coordinator.data["power_w"] == 196
+        assert coordinator.data["relay_on"] is True
+        assert coordinator.data["energy_kwh"] is None
+        assert coordinator.energy_error == "unsupported firmware"
     finally:
         await coordinator.async_shutdown()
 

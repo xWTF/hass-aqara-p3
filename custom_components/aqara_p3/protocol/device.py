@@ -3,6 +3,7 @@
 
 import asyncio
 
+from .errors import ResourceMissing
 from .models import DeviceIdentity, Snapshot
 from .telnet import Resource, TelnetReader
 
@@ -34,10 +35,14 @@ class ReadOnlyDevice:
                 ("ac", Resource.AC),
                 ("fan", Resource.FAN),
                 ("relay", Resource.RELAY),
+                ("relay_state", Resource.RELAY_STATE),
                 ("ac_function", Resource.AC_FUNCTION),
                 ("chip_temperature", Resource.CHIP_TEMPERATURE),
             ):
-                values[name] = await self.transport.read(resource)
+                try:
+                    values[name] = await self.transport.read(resource)
+                except ResourceMissing:
+                    values[name] = None
             return Snapshot.decode(self.identity, **values)
 
     async def close(self):

@@ -50,8 +50,23 @@ def book_bytes():
 
 
 @pytest.fixture
-async def hass(tmp_path):
+async def hass(tmp_path, monkeypatch):
     from pathlib import Path
+    from unittest.mock import AsyncMock
+
+    from custom_components.aqara_p3.protocol.control import P3Control
+
+    monkeypatch.setattr(
+        P3Control,
+        "read_energy",
+        AsyncMock(
+            return_value={
+                "epoch": "00000000-0000-0000-0000-000000000001:100:1000",
+                "committed_wh": 260,
+                "pending_ws": 0,
+            }
+        ),
+    )
 
     from homeassistant import loader
     from homeassistant.helpers import (

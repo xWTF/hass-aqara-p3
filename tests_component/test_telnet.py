@@ -14,6 +14,7 @@ from custom_components.aqara_p3.protocol.errors import (
     AuthenticationError,
     ConnectionLost,
     InvalidData,
+    ResourceMissing,
 )
 from custom_components.aqara_p3.protocol.telnet import COMMANDS, Resource, TelnetReader
 
@@ -49,8 +50,16 @@ async def device_server(
                 line = line.rstrip("\r\n")
                 if not line:
                     continue
+                # BusyBox echoes long command lines across terminal columns.
+                writer.write(
+                    "\r\n".join(line[i : i + 80] for i in range(0, len(line), 80))
+                    + "\r\n"
+                )
+                start = re.match(r"printf '\\n(__P3_[0-9a-f]{32}__):BEGIN\\n'; ", line)
+                if start:
+                    writer.write(f"\r\n{start[1]}:BEGIN\r\n")
+                    line = line[start.end() :]
                 seen.append(line)
-                writer.write(line + "\r\n")
                 match = re.search(r"__P3_[0-9a-f]{32}__", line)
                 if match:
                     writer.write(f"\r\n{match[0]}:{exit_code}\r\n# ")
@@ -106,6 +115,30 @@ async def test_reads_with_and_without_password():
                 await transport.close()
             assert len([x for x in seen if x == COMMANDS[Resource.MODEL]]) == 2
             assert password not in seen or not password
+
+
+async def test_missing_cache_preserves_connection_but_other_errors_do_not():
+    async with device_server(response="", exit_code=44) as (port, _):
+        transport = TelnetReader(DeviceConfig("127.0.0.1"), port=port)
+        try:
+            with pytest.raises(ResourceMissing):
+                await transport.read(Resource.POWER)
+            assert transport.connected
+            with pytest.raises(InvalidData) as error:
+                await transport.read(Resource.MODEL)
+            assert not isinstance(error.value, ResourceMissing)
+            assert not transport.connected
+        finally:
+            await transport.close()
+    async with device_server(response="permission denied", exit_code=1) as (port, _):
+        transport = TelnetReader(DeviceConfig("127.0.0.1"), port=port)
+        try:
+            with pytest.raises(InvalidData) as error:
+                await transport.read(Resource.POWER)
+            assert not isinstance(error.value, ResourceMissing)
+            assert not transport.connected
+        finally:
+            await transport.close()
 
 
 async def test_wrong_password_is_bounded_and_not_logged(caplog):

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Aqara P3 固件"
+  short_description: "复用 P3 自启动固件构建、MIPS 模拟验证与实机刷写经验"
+  default_prompt: "使用 $aqara-p3-firmware 分析当前 P3 固件和槽位，制作并验证用户分区自启动固件。"

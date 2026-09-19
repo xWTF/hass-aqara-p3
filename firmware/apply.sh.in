@@ -1,0 +1,88 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-3.0-only
+# Device-specific output of p3_firmware.py prepare. Never publish this output.
+set -eu
+PATH=/bin:/usr/bin:/sbin:/usr/sbin
+export PATH
+[ "${1:-}" = --confirmed ] || { echo 'Review plan.json, then run with --confirmed'; exit 2; }
+STAGE=/data/aqara-p3-firmware-install
+BACKUP=/data/aqara-p3-firmware-backup
+fail() { echo "FAILED: $*"; exit 1; }
+verify() {
+    value=$(sha256sum "$1") || fail "Cannot hash $1"
+    [ "${value%% *}" = "$2" ] || fail "Checksum mismatch: $1"
+}
+payload() {
+    value=$(head -c "$2" "$1" | sha256sum)
+    [ "${value%% *}" = "$3" ] || fail "Payload mismatch: $1"
+}
+[ "$(getprop persist.sys.model)" = lumi.aircondition.acn05 ] || fail 'Wrong model'
+[ "$(cat /sys/class/net/wlan0/address)" = '@MAC@' ] || fail 'Wrong device'
+[ "$(cat /proc/sys/kernel/random/boot_id)" = '@BOOT_ID@' ] || fail 'Device rebooted; prepare a fresh plan'
+[ "$(cat /proc/cmdline)" = '@CMDLINE@' ] || fail 'Active root changed'
+verify /proc/mtd @MTD_SHA@
+grep -q 'RTL8197F' /proc/cpuinfo || fail 'Wrong SoC'
+grep -q 'MIPS 24Kc' /proc/cpuinfo || fail 'Wrong CPU'
+@TOOLS_CHECKS@
+[ "$(readlink -f /data)" = /data ] || fail 'Unexpected data path'
+[ "$(readlink -f "$STAGE")" = "$STAGE" ] || fail 'Unexpected staging path'
+for name in kernel.bin rootfs.bin post_init.sh apply.sh; do
+    [ -f "$STAGE/$name" ] && [ ! -L "$STAGE/$name" ] || fail 'Unexpected staged file'
+done
+for n in 0 1 2 @KERNEL_ACTIVE@ @ROOT_ACTIVE@ @KERNEL_TARGET@ @ROOT_TARGET@; do
+    [ -b "/dev/mtdblock$n" ] || fail 'Expected MTD block device'
+done
+for n in @KERNEL_TARGET@ @ROOT_TARGET@; do
+    [ -c "/dev/mtd$n" ] || fail 'Expected MTD character device'
+done
+verify /dev/mtdblock0 @BOOTLOADER@
+verify /dev/mtdblock1 @BOOT_ORIGINAL@
+verify /dev/mtdblock2 @FACTORY@
+verify /dev/mtdblock@KERNEL_ACTIVE@ @KERNEL_ACTIVE_SHA@
+verify /dev/mtdblock@ROOT_ACTIVE@ @ROOT_ACTIVE_SHA@
+verify "$STAGE/kernel.bin" @KERNEL_IMAGE@
+verify "$STAGE/rootfs.bin" @ROOTFS_IMAGE@
+verify "$STAGE/post_init.sh" @POST_INIT@
+[ ! -e "$BACKUP" ] && [ ! -L "$BACKUP" ] || fail 'Backup exists; refusing overwrite'
+if [ -e /data/scripts ] || [ -L /data/scripts ]; then
+    [ -d /data/scripts ] && [ ! -L /data/scripts ] || fail 'Unexpected scripts directory'
+fi
+[ ! -e /data/scripts/post_init.sh ] && [ ! -L /data/scripts/post_init.sh ] || fail 'User script exists; review it first'
+free=$(df -k /data | tail -n 1 | awk '{print $(NF-2)}')
+[ "$free" -ge 1024 ] || fail 'Insufficient space for backup and logs'
+umask 077
+mkdir "$STAGE/execution" || fail 'Execution already reserved; inspect logs instead of retrying'
+exec > "$STAGE/execution/apply.log" 2>&1
+printf 'PREFLIGHT_PASSED\n' > "$STAGE/execution/state"
+mkdir "$BACKUP"
+cat /dev/mtdblock1 > "$BACKUP/boot_info.original.bin"
+cat /etc/init.d/rcS > "$BACKUP/rcS.original"
+printf 'ABSENT\n' > "$BACKUP/post_init.original.absent"
+verify "$BACKUP/boot_info.original.bin" @BOOT_ORIGINAL@
+chmod 400 "$BACKUP/boot_info.original.bin" "$BACKUP/rcS.original" "$BACKUP/post_init.original.absent"
+chmod 500 "$BACKUP"
+[ -d /data/scripts ] || mkdir /data/scripts
+chmod 755 "$STAGE/post_init.sh"
+ln "$STAGE/post_init.sh" /data/scripts/post_init.sh
+verify /data/scripts/post_init.sh @POST_INIT@
+sync
+printf 'KERNEL_FLASH_STARTED\n' > "$STAGE/execution/state"
+/bin/fw_update "$STAGE/kernel.bin" > "$STAGE/execution/kernel.log" 2>&1
+sync
+payload /dev/mtdblock@KERNEL_TARGET@ @KERNEL_SIZE@ @KERNEL_PAYLOAD@
+verify /dev/mtdblock1 @BOOT_KERNEL@
+printf 'ROOTFS_FLASH_STARTED\n' > "$STAGE/execution/state"
+/bin/fw_update "$STAGE/rootfs.bin" > "$STAGE/execution/rootfs.log" 2>&1
+sync
+payload /dev/mtdblock@KERNEL_TARGET@ @KERNEL_SIZE@ @KERNEL_PAYLOAD@
+payload /dev/mtdblock@ROOT_TARGET@ @ROOTFS_SIZE@ @ROOTFS_PAYLOAD@
+verify /dev/mtdblock1 @BOOT_FINAL@
+verify /dev/mtdblock@KERNEL_ACTIVE@ @KERNEL_ACTIVE_SHA@
+verify /dev/mtdblock@ROOT_ACTIVE@ @ROOT_ACTIVE_SHA@
+verify /dev/mtdblock0 @BOOTLOADER@
+verify /dev/mtdblock2 @FACTORY@
+verify /data/scripts/post_init.sh @POST_INIT@
+verify "$BACKUP/boot_info.original.bin" @BOOT_ORIGINAL@
+printf 'VERIFIED_READY_TO_REBOOT\n' > "$STAGE/execution/state"
+sync
+echo VERIFIED_READY_TO_REBOOT

@@ -12,6 +12,30 @@
 !/custom_components/
 !/scripts/
 !/tests_component/
+!/.agents/
+!/firmware/
+/firmware/*
+!/firmware/README.md
+!/firmware/p3_firmware.py
+!/firmware/apply.sh.in
+!/firmware/4.0.4-user-init/
+/firmware/4.0.4-user-init/*
+!/firmware/4.0.4-user-init/kernel.bin
+!/firmware/4.0.4-user-init/rootfs.bin
+!/firmware/4.0.4-user-init/post_init.sh
+!/firmware/4.0.4-user-init/manifest.json
+!/firmware/4.0.4-user-init/SHA256SUMS
+!/firmware/4.0.4-user-init/VALIDATION.md
+/.agents/*
+!/.agents/skills/
+/.agents/skills/*
+!/.agents/skills/aqara-p3-firmware/
+
+# Skill sources only: keep firmware, lab output and device backups private.
+/.agents/skills/aqara-p3-firmware/**/*.bin
+/.agents/skills/aqara-p3-firmware/**/*.squashfs
+/.agents/skills/aqara-p3-firmware/**/output*/
+/.agents/skills/aqara-p3-firmware/**/work/
 
 # Python environments, caches and build output, including nested directories.
 .venv/

@@ -1,0 +1,57 @@
+{
+  "schema": 1,
+  "model": "lumi.aircondition.acn05",
+  "release": "4.0.4-user-init",
+  "base_firmware": "4.0.4_0016",
+  "minimum_source_version": null,
+  "compatibility": "fingerprints-and-layout",
+  "files": {
+    "rootfs.bin": {
+      "size": 15597588,
+      "sha256": "39bb109145c4b5bf724f24127b6dc64acd7de08af9ed326ad422e5ac6c67a1fa",
+      "payload_size": 15597572,
+      "payload_sha256": "f28c352cf5d1d2b8aab6a84ea388c47e4ff6a383d3fddc66bc39183af4c8bb0c"
+    },
+    "kernel.bin": {
+      "size": 2101268,
+      "sha256": "c729a368201e6bbedb5312e0dcd911e619d41b7b62cc95f4336ae9e1727d224a",
+      "payload_size": 2101252,
+      "payload_sha256": "1cd8402f628d3fb948d8c87a0dbd8dd14a83ccfce3ff93084ef546efdbb60e2d"
+    },
+    "post_init.sh": {
+      "size": 219,
+      "sha256": "dd6cc488dab69cf86959541a8c610f01d1b2c364aa17aced6254954cc76569e3"
+    }
+  },
+  "required_tools": {
+    "/bin/fw_update": "97efaf9b4d2a7b623ba8469ad192c1e0ef65ff036869a4911299a6c7059c0dc7",
+    "/bin/busybox": "0bd1ce46ead9a39c432c832cddecaa6d32bff5327209329d674909d3551d758b",
+    "/bin/flash_erase": "67a4bd13afd2907aac364b1b0b6a46e20262ef40ede25f4c357b32e1f3bd534d",
+    "/bin/nandwrite": "259e07085ff70b9c95db9da6c65e8d23f2fe72146b489e98673819209beaa5dc",
+    "/bin/nanddump": "851902d170ad66c947ba5b7c004654a6b9462b61a6ec8edfa5c756cb649ea551"
+  },
+  "required_bootloader_sha256": "1d1426dbdfc98537cf5d435ec3870e9c3ede288bf273605e01d02f0ac7f24f10",
+  "rcs_sha256": "b86120fb125203c887815faf4bde597ae8eabf4f363617c29e4c543af4216647",
+  "tool_profiles": [
+    {
+      "name": "4.0.4 vendor tools",
+      "tools": {
+        "/bin/fw_update": "97efaf9b4d2a7b623ba8469ad192c1e0ef65ff036869a4911299a6c7059c0dc7",
+        "/bin/busybox": "0bd1ce46ead9a39c432c832cddecaa6d32bff5327209329d674909d3551d758b",
+        "/bin/flash_erase": "67a4bd13afd2907aac364b1b0b6a46e20262ef40ede25f4c357b32e1f3bd534d",
+        "/bin/nandwrite": "259e07085ff70b9c95db9da6c65e8d23f2fe72146b489e98673819209beaa5dc",
+        "/bin/nanddump": "851902d170ad66c947ba5b7c004654a6b9462b61a6ec8edfa5c756cb649ea551"
+      }
+    },
+    {
+      "name": "4.0.1 / system 3.4.0 vendor tools",
+      "tools": {
+        "/bin/fw_update": "54151bba21f75f3e1cf0de6a8fb88fc76d9f6828427415fcf34c854d13834f92",
+        "/bin/busybox": "08f456915406773d47f96b60fb404b26cf4964a274f286e8e041829eee864ac5",
+        "/bin/flash_erase": "730698fd7fe20eaafdacdd4497c882ef74541105dbe0a67b295347582d49af54",
+        "/bin/nandwrite": "08f456915406773d47f96b60fb404b26cf4964a274f286e8e041829eee864ac5",
+        "/bin/nanddump": "08f456915406773d47f96b60fb404b26cf4964a274f286e8e041829eee864ac5"
+      }
+    }
+  ]
+}

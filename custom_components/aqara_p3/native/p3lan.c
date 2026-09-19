@@ -2,7 +2,7 @@
  * Copyright (c) 2026 Aqara P3 contributors
  * Build with Zig 0.14.1: zig cc -target mipsel-linux.3.10-musleabi -mcpu=mips32r2
  * -msoft-float -Os -static -s p3lan.c -o p3lan-helper
- * No daemon, cloud, configuration edits, raw UART opens, or downloads.
+ * No daemon, cloud, configuration edits or raw UART opens. Audio uses RAM pipes.
  */
 #define _GNU_SOURCE
 #include <sys/socket.h>
@@ -25,6 +25,8 @@
 #include <time.h>
 #include <dirent.h>
 #include <elf.h>
+#include <netinet/in.h>
+#include <poll.h>
 
 enum { ENERGY_READY, ENERGY_MATCH, ENERGY_BATCHES, ENERGY_SAMPLES, ENERGY_PENDING, ENERGY_SYMBOLS };
 struct energy_layout { uint32_t value[ENERGY_SYMBOLS], origin; };
@@ -383,6 +385,132 @@ finish:
  close(fd); return rc;
 }
 
+/* One authenticated, bounded PCM session. Only RAM pipes and a RAM flock are
+ * used. A zero length frame means drain; disconnect without it means cancel.
+ * The shell execs this process, so Telnet HUP tears down our own child too. */
+#ifndef P3_APLAY
+#define P3_APLAY "/bin/aplay"
+#endif
+#ifndef P3_AUDIO_LOCK
+#define P3_AUDIO_LOCK "/tmp/aqara-p3-audio.lock"
+#endif
+#ifndef P3_AUDIO_IDLE
+#define P3_AUDIO_IDLE 15
+#endif
+static int audio_wait(int fd,short events,double deadline) {
+ while(!done && now()<deadline) {
+  struct pollfd p={fd,events,0}; int rc=poll(&p,1,100);
+  if(rc>0)return (p.revents&events) ? 0 : -1;
+  if(rc<0 && errno!=EINTR)return -1;
+ }
+ return -1;
+}
+static int audio_transfer(int fd,void *buffer,size_t count,int writing,double deadline) {
+ unsigned char *p=buffer;
+ while(count) {
+  if(audio_wait(fd,writing?POLLOUT:POLLIN,deadline))return -1;
+  ssize_t n=writing?write(fd,p,count):read(fd,p,count);
+  if(n<0 && (errno==EAGAIN || errno==EINTR))continue;
+  if(n<=0)return -1;
+  p+=n;count-=(size_t)n;
+ }
+ return 0;
+}
+static int audio_reap(pid_t child,int cancel) {
+ int status=0; double deadline=now()+3;
+ if(cancel)kill(child,SIGTERM);
+ while(now()<deadline && (!done || cancel)) {
+  pid_t rc=waitpid(child,&status,WNOHANG);
+  if(rc==child)return WIFEXITED(status)?WEXITSTATUS(status):5;
+  if(rc<0 && errno!=EINTR)return 5;
+  usleep(10000);
+ }
+ kill(child,SIGKILL);
+ while(waitpid(child,&status,0)<0 && errno==EINTR) {}
+ return 5;
+}
+static int audio_session(const char *token) {
+ if(strlen(token)!=32 || strspn(token,"0123456789abcdef")!=32)return 2;
+ int rc=3,lock=-1,server=-1,client=-1,pipefd[2]={-1,-1}; pid_t child=-1;
+ lock=open(P3_AUDIO_LOCK,O_CREAT|O_RDWR|O_NOFOLLOW|O_CLOEXEC,0600);
+ struct stat st;
+ if(lock<0 || fstat(lock,&st) || !S_ISREG(st.st_mode) || st.st_uid!=geteuid())goto finish;
+ if(flock(lock,LOCK_EX|LOCK_NB)){rc=6;goto finish;}
+ server=socket(AF_INET,SOCK_STREAM|SOCK_CLOEXEC|SOCK_NONBLOCK,0);
+ if(server<0)goto finish;
+ struct sockaddr_in addr={.sin_family=AF_INET,.sin_addr.s_addr=htonl(INADDR_ANY)};
+ socklen_t addrlen=sizeof(addr);
+ if(bind(server,(struct sockaddr *)&addr,sizeof(addr)) || listen(server,1) ||
+    getsockname(server,(struct sockaddr *)&addr,&addrlen))goto finish;
+ printf("P3_AUDIO_PORT %u\n",ntohs(addr.sin_port));fflush(stdout);
+ double deadline=now()+10;
+ while(!done && now()<deadline) {
+  if(audio_wait(server,POLLIN,deadline))goto finish;
+  client=accept4(server,NULL,NULL,SOCK_CLOEXEC|SOCK_NONBLOCK);
+  if(client<0){if(errno==EAGAIN || errno==EINTR)continue;goto finish;}
+  unsigned char header[40];
+  double auth_end=now()+2;if(auth_end>deadline)auth_end=deadline;
+  if(!audio_transfer(client,header,sizeof(header),0,auth_end) &&
+     !memcmp(header,"P3AUDIO1",8) && !memcmp(header+8,token,32))break;
+  close(client);client=-1;
+ }
+ if(client<0 || done)goto finish;
+ close(server);server=-1;
+ int capacity=16384;
+ setsockopt(client,SOL_SOCKET,SO_RCVBUF,&capacity,sizeof(capacity));
+ if(pipe2(pipefd,O_CLOEXEC))goto finish;
+ pid_t parent=getpid();
+ child=fork();if(child<0)goto finish;
+ if(!child) {
+  prctl(PR_SET_PDEATHSIG,SIGKILL);
+  if(getppid()!=parent)_exit(125);
+  signal(SIGTERM,SIG_DFL);signal(SIGHUP,SIG_DFL);signal(SIGINT,SIG_DFL);
+  signal(SIGPIPE,SIG_DFL);
+  dup2(pipefd[0],STDIN_FILENO);
+  int nullfd=open("/dev/null",O_RDWR);
+  if(nullfd<0)_exit(126);
+  dup2(nullfd,STDOUT_FILENO);dup2(nullfd,STDERR_FILENO);
+  close(nullfd);close(pipefd[0]);close(pipefd[1]);close(client);close(lock);
+  execl(P3_APLAY,"aplay","-q","-N","-D","hw:0,0","-t","raw",
+        "-f","S32_LE","-r","32000","-c","1","-x","1",(char *)NULL);
+  _exit(127);
+ }
+ close(pipefd[0]);pipefd[0]=-1;
+ if(fcntl(pipefd[1],F_SETFL,O_NONBLOCK))goto finish;
+ char ready[]="READY\n";
+ if(audio_transfer(client,ready,sizeof(ready)-1,1,now()+2))goto finish;
+ deadline=now()+3600;
+ for(;;) {
+  uint32_t wire; unsigned char data[16384];
+  double idle=now()+P3_AUDIO_IDLE;if(idle>deadline)idle=deadline;
+  if(audio_transfer(client,&wire,4,0,idle)){rc=5;break;}
+  uint32_t count=ntohl(wire);
+  if(!count) {
+   close(pipefd[1]);pipefd[1]=-1;
+   rc=audio_reap(child,0);child=-1;
+   break;
+  }
+  if(count>sizeof(data) || count%4){rc=2;break;}
+  if(audio_transfer(client,data,count,0,idle) ||
+     audio_transfer(pipefd[1],data,count,1,idle)){rc=5;break;}
+ }
+finish:
+ if(pipefd[0]>=0)close(pipefd[0]);
+ if(pipefd[1]>=0)close(pipefd[1]);
+ if(child>0)audio_reap(child,1);
+ if(server>=0)close(server);
+ if(lock>=0)close(lock);
+ if(client>=0) {
+  char result[40];int length=snprintf(result,sizeof(result),"DONE %d\n",rc);
+  /* Also acknowledge cancellation after a Telnet HUP. No queued audio has to
+   * be drained to reach a stop command; this socket remains open for the ACK. */
+  send(client,result,(size_t)length,MSG_NOSIGNAL);
+  close(client);
+ }
+ printf("P3_AUDIO_DONE %d\n",rc);fflush(stdout);
+ return rc;
+}
+
 int main(int argc,char **argv) {
  if(argc==2 && !strcmp(argv[1],"version")){puts("p3lan-native-1");return 0;}
  /* Internal fixed-path mount calls: parent local-mode already holds flock. */
@@ -395,6 +523,7 @@ int main(int argc,char **argv) {
  /* Independent of IR capture/control's lock; an exiting data shell must be
   * able to restore its lamp policy while capture is still running. */
  if(argc==4 && !strcmp(argv[1],"led-session")){alarm(12);return led_session(argv[2],argv[3]);}
+ if(argc==3 && !strcmp(argv[1],"audio")){alarm(3620);return audio_session(argv[2]);}
  int lock=open("/tmp/p3lan-native.lock",O_CREAT|O_RDWR,0600);
  if(lock<0 || flock(lock,LOCK_EX|LOCK_NB)<0){
   if(argc>1 && !strcmp(argv[1],"local-mode")) puts("P3_LOCAL_ERROR busy");

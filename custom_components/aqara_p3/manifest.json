@@ -1,13 +1,13 @@
 {
   "domain": "aqara_p3",
   "name": "Aqara P3",
-  "version": "0.4.12",
+  "version": "0.5.1",
   "config_flow": true,
   "integration_type": "device",
   "iot_class": "local_polling",
   "requirements": [
     "telnetlib3==5.0.0"
   ],
-  "dependencies": [],
+  "dependencies": ["ffmpeg", "media_source"],
   "codeowners": []
 }

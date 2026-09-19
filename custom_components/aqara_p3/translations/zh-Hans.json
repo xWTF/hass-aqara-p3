@@ -147,6 +147,42 @@
     },
     "powerful_mode_required": {
       "message": "强力运转仅适用于制冷或制热模式。"
+    },
+    "media_http_error": {
+      "message": "获取音频失败：HTTP {status}。"
+    },
+    "media_tls_error": {
+      "message": "Home Assistant 无法与音频来源建立通过证书验证的 TLS 连接。"
+    },
+    "media_source_connection": {
+      "message": "Home Assistant 无法连接音频来源（{reason}）。请检查 HA 的内部地址、DNS 和端口。"
+    },
+    "media_ffmpeg_missing": {
+      "message": "Home Assistant 主机上未找到 FFmpeg。"
+    },
+    "media_device_error": {
+      "message": "P3 音频连接失败：{reason}"
+    },
+    "media_source_timeout": {
+      "message": "获取或解码音频超时。"
+    },
+    "media_device_timeout": {
+      "message": "连接 P3 或播放音频超时。"
+    },
+    "media_source_error": {
+      "message": "音频来源处理失败（{reason}）。"
+    },
+    "media_stream_error": {
+      "message": "P3 音频传输失败（{reason}）。"
+    },
+    "media_start_timeout": {
+      "message": "音频播放在 60 秒内未能启动。"
+    },
+    "media_decode_error": {
+      "message": "FFmpeg 无法解码这段音频。"
+    },
+    "media_empty": {
+      "message": "音频来源为空。"
     }
   },
   "entity": {
@@ -240,6 +276,11 @@
       },
       "sound": {
         "name": "内置音效"
+      }
+    },
+    "media_player": {
+      "speaker": {
+        "name": "扬声器"
       }
     }
   },

@@ -46,3 +46,24 @@ choice in the background every 60 seconds, so the cloud client can run between a
 device reboot and HA reconnecting. Power cycling itself has not been part of the
 verification; enable, repeat enable, restore and original backup integrity have
 been checked on firmware 4.0.4.
+
+## Media playback
+
+`audio TOKEN` owns a temporary IPv4 TCP listener and one original `aplay`
+child. A separate RAM flock serializes media sessions without holding the IR
+or IPC lock. The login shell execs the helper; HUP, parent death, connection
+loss and bounded timeouts clean up the playback child. No audio files are
+created on the device.
+
+The 40-byte authentication header is `P3AUDIO1` followed by a per-session
+32-character lowercase hex token. Each frame has a four-byte big-endian length
+and up to 16 KiB of aligned S32_LE / 32000 Hz / mono PCM. A zero length is the
+explicit normal end marker; an incomplete frame or unmarked EOF cancels the
+player. The helper replies `READY` after spawning and `DONE 0` after a successful
+drain. These report process state, not independent acoustic confirmation.
+
+Authentication/connection setup is bounded, input stalls time out after 15
+seconds and sessions last at most an hour. Only the owned player PID is
+terminated. Its parent-death signal also covers forced helper termination.
+The factory player needs its undocumented `-x 1` option to avoid its default
+three-pass behavior. HA verifies the player fingerprint before launching.

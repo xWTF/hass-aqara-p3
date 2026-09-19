@@ -57,7 +57,7 @@ async def test_native_platform_setup_and_unload(hass, identity, snapshot, monkey
     assert entry.state == ConfigEntryState.LOADED
     registry = er.async_get(hass)
     entities = er.async_entries_for_config_entry(registry, entry.entry_id)
-    assert len(entities) == 19
+    assert len(entities) == 20
     disabled = {
         "chip_temperature",
         "on_timer",
@@ -105,10 +105,33 @@ async def test_native_platform_setup_and_unload(hass, identity, snapshot, monkey
     assert security_device.via_device_id == main_device.id
     assert "Sound" in security_device.name
     assert all(e.domain != "alarm_control_panel" for e in entities)
-    sec_keys = {"sound", "sound_volume", "play_sound", "stop_sound"}
+    sec_keys = {"sound", "sound_volume", "play_sound", "stop_sound", "speaker"}
     for e in entities:
         if e.unique_id.removeprefix(identity.uid + "_") in sec_keys:
             assert e.device_id == security_device.id
+    speaker = next(e for e in entities if e.unique_id.endswith("_speaker"))
+    assert speaker.domain == "media_player"
+    assert hass.states.get(speaker.entity_id).state == "idle"
+    await hass.services.async_call(
+        "media_player",
+        "volume_set",
+        {"entity_id": speaker.entity_id, "volume_level": 0.35},
+        blocking=True,
+    )
+    assert hass.states.get(speaker.entity_id).attributes["volume_level"] == 0.35
+    media_play = entry.runtime_data.audio.media.play = AsyncMock()
+    await hass.services.async_call(
+        "media_player",
+        "play_media",
+        {
+            "entity_id": speaker.entity_id,
+            "media_content_type": "music",
+            "media_content_id": "https://example.invalid/voice.wav",
+            "announce": True,
+        },
+        blocking=True,
+    )
+    media_play.assert_awaited_once_with("https://example.invalid/voice.wav", None)
     assert not any(e.unique_id.endswith("_outlet") for e in entities)
     with pytest.raises(HomeAssistantError):
         await hass.services.async_call(
@@ -184,6 +207,7 @@ async def test_native_platform_setup_and_unload(hass, identity, snapshot, monkey
         ]
     ]
     assert await hass.config_entries.async_reload(entry.entry_id)
+    assert hass.states.get(speaker.entity_id).attributes["volume_level"] == 0.35
     assert all(registry.async_get(e.entity_id) is None for e in removed)
     assert await hass.config_entries.async_unload(entry.entry_id)
     assert entry.state == ConfigEntryState.NOT_LOADED

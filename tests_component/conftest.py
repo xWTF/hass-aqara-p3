@@ -68,7 +68,7 @@ async def hass(tmp_path, monkeypatch):
         ),
     )
 
-    from homeassistant import loader
+    from homeassistant import auth, loader
     from homeassistant.helpers import (
         area_registry,
         device_registry,
@@ -91,6 +91,7 @@ async def hass(tmp_path, monkeypatch):
     device_registry.async_setup(instance)
     await device_registry.async_load(instance)
     await entity_registry.async_load(instance)
+    instance.auth = await auth.auth_manager_from_config(instance, [], [])
     yield instance
     await instance.async_stop(force=True)
 

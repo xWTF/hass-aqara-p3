@@ -5,7 +5,7 @@
 async def async_get_config_entry_diagnostics(hass, entry):
     coordinator = entry.runtime_data
     return {
-        "version": "0.4.12",
+        "version": "0.5.1",
         "local_mode": {
             "requested": entry.options.get("local_mode"),
             "state": coordinator.local_mode.state,
@@ -14,6 +14,13 @@ async def async_get_config_entry_diagnostics(hass, entry):
         },
         "audio_available": coordinator.audio.last_update_success,
         "audio": coordinator.audio.data,
+        "media": {
+            "state": coordinator.audio.media.state,
+            "last_error": coordinator.audio.media.error,
+            "last_error_detail": coordinator.audio.media.error_detail,
+            "last_error_stage": coordinator.audio.media.error_stage,
+            "format": "S32_LE/32000/mono",
+        },
         "model": entry.data.get("model"),
         "firmware": entry.data.get("firmware"),
         "available": coordinator.last_update_success,

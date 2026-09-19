@@ -4,3 +4,8 @@ telnetlib3==5.0.0
 pytest==9.1.1
 pytest-asyncio==1.4.0
 ruff==0.16.7
+ha-ffmpeg==3.2.2
+# HA's media_source import path also loads frontend/OAuth support.
+habluetooth==6.26.11
+backoff==2.2.1
+# Install FFmpeg on the test host for real HTTP/decoder cancellation tests.

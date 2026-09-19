@@ -147,6 +147,42 @@
     },
     "powerful_mode_required": {
       "message": "Powerful operation requires cool or heat mode."
+    },
+    "media_http_error": {
+      "message": "Audio download returned HTTP {status}."
+    },
+    "media_tls_error": {
+      "message": "Home Assistant could not establish a verified TLS connection to the audio source."
+    },
+    "media_source_connection": {
+      "message": "Home Assistant could not connect to the audio source ({reason}). Check the Home Assistant internal URL, DNS and port."
+    },
+    "media_ffmpeg_missing": {
+      "message": "FFmpeg was not found on the Home Assistant host."
+    },
+    "media_device_error": {
+      "message": "P3 audio connection failed: {reason}"
+    },
+    "media_source_timeout": {
+      "message": "Timed out fetching or decoding audio."
+    },
+    "media_device_timeout": {
+      "message": "Timed out connecting to or playing audio on P3."
+    },
+    "media_source_error": {
+      "message": "Audio source failed ({reason})."
+    },
+    "media_stream_error": {
+      "message": "P3 audio stream failed ({reason})."
+    },
+    "media_start_timeout": {
+      "message": "Audio playback did not start within 60 seconds."
+    },
+    "media_decode_error": {
+      "message": "Audio format could not be decoded."
+    },
+    "media_empty": {
+      "message": "Audio source is empty."
     }
   },
   "entity": {
@@ -240,6 +276,11 @@
       },
       "sound": {
         "name": "Built-in sound"
+      }
+    },
+    "media_player": {
+      "speaker": {
+        "name": "Speaker"
       }
     }
   },

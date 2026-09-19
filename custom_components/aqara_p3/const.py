@@ -12,6 +12,7 @@ PLATFORMS = [
     Platform.NUMBER,
     Platform.BUTTON,
     Platform.SELECT,
+    Platform.MEDIA_PLAYER,
 ]
 CONF_POLL_INTERVAL = "poll_interval"
 DEFAULT_POLL_INTERVAL = 15

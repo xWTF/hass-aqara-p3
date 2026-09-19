@@ -19,6 +19,7 @@ from homeassistant.helpers.update_coordinator import (
 )
 
 from .const import DOMAIN
+from .playback import MediaPlayback
 from .protocol.errors import P3Error
 from .sounds import REPEAT_GAP, SOUND_DURATIONS
 
@@ -66,6 +67,7 @@ class AudioCoordinator(DataUpdateCoordinator):
         self.start_task = None
         self._playback_task = None
         self._closed = False
+        self.media = MediaPlayback(self)
 
     async def _async_update_data(self):
         task = asyncio.current_task()
@@ -135,6 +137,7 @@ class AudioCoordinator(DataUpdateCoordinator):
             async with self._command_lock:
                 if self._closed:
                     raise HomeAssistantError("Audio service unavailable")
+                await self.media.stop_locked()
                 replacing = self._playback_task is not None
                 self._cancel_playback()
                 if replacing:
@@ -179,6 +182,7 @@ class AudioCoordinator(DataUpdateCoordinator):
         self._tasks.add(task)
         try:
             async with self._command_lock:
+                await self.media.stop_locked()
                 self._cancel_playback()
                 if self._closed:
                     raise HomeAssistantError("Audio service unavailable")
@@ -188,6 +192,8 @@ class AudioCoordinator(DataUpdateCoordinator):
 
     async def async_shutdown(self):
         self._closed = True
+        async with self._command_lock:
+            await self.media.stop_locked()
         await super().async_shutdown()
         tasks = set(self._tasks)
         playback = self._playback_task

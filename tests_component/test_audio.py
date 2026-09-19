@@ -71,7 +71,10 @@ async def test_audio_ipc_exact_replies_and_no_retry(bad):
     else:
         assert await control.audio_read() == raw_state()
     assert control.session.run.await_count == 2
-    control.session.close.assert_awaited_once()
+    if bad:
+        control.session.close.assert_awaited_once()
+    else:
+        control.session.close.assert_not_awaited()
 
 
 @pytest.mark.parametrize(

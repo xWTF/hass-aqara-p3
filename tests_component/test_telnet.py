@@ -4,6 +4,7 @@
 import asyncio
 import base64
 import re
+import socket
 from contextlib import asynccontextmanager
 
 import pytest
@@ -28,6 +29,7 @@ async def device_server(
     stall=False,
     disconnect=False,
     fragment=False,
+    commands=False,
 ):
     seen = []
     tasks = set()
@@ -60,11 +62,16 @@ async def device_server(
                     writer.write(f"\r\n{start[1]}:BEGIN\r\n")
                     line = line[start.end() :]
                 seen.append(line)
-                match = re.search(r"__P3_[0-9a-f]{32}__", line)
+                match = re.search(r"__P3_(?:CMD_)?[0-9a-f]{32}__", line)
                 if match:
                     writer.write(f"\r\n{match[0]}:{exit_code}\r\n# ")
                     continue
-                assert line in COMMANDS.values(), "Unexpected remote command"
+                if commands and line == "printf '\\n'":
+                    writer.write("\r\n# ")
+                    continue
+                assert commands or line in COMMANDS.values(), (
+                    "Unexpected remote command"
+                )
                 if stall:
                     await asyncio.sleep(5)
                 if disconnect:
@@ -111,6 +118,12 @@ async def test_reads_with_and_without_password():
                 assert await transport.read(Resource.MODEL) == "lumi.aircondition.acn05"
                 assert await transport.read(Resource.MODEL) == "lumi.aircondition.acn05"
                 assert transport.connected
+                assert (
+                    transport._writer.get_extra_info("socket").getsockopt(
+                        socket.SOL_SOCKET, socket.SO_KEEPALIVE
+                    )
+                    == 1
+                )
             finally:
                 await transport.close()
             assert len([x for x in seen if x == COMMANDS[Resource.MODEL]]) == 2
@@ -229,3 +242,35 @@ async def test_cancellation_closes_connection():
         with pytest.raises(asyncio.CancelledError):
             await task
         assert not transport.connected
+
+
+async def test_control_reuses_login_and_reconnects_with_new_identity_token():
+    from custom_components.aqara_p3.protocol.control import CommandSession
+
+    async with device_server(commands=True, response="123456") as (port, _):
+        session = CommandSession(DeviceConfig("127.0.0.1"), port=port)
+        try:
+            assert await session.run("getprop persist.sys.miio_did") == "123456"
+            writer, token = session._writer, session.connection_id
+            assert token is not None
+            assert await session.run("getprop persist.sys.miio_did") == "123456"
+            assert session._writer is writer
+            assert session.connection_id == token
+            await session.close()
+            assert session.connection_id is None
+            assert await session.run("getprop persist.sys.miio_did") == "123456"
+            assert session.connection_id != token
+        finally:
+            await session.close()
+
+
+async def test_control_timeout_discards_framing_and_does_not_retry():
+    from custom_components.aqara_p3.protocol.control import CommandSession
+
+    async with device_server(commands=True, stall=True) as (port, seen):
+        session = CommandSession(DeviceConfig("127.0.0.1"), port=port)
+        with pytest.raises(TimeoutError):
+            await session.run("control-command", timeout=0.1)
+        assert not session.connected
+        assert session.connection_id is None
+        assert seen.count("control-command") == 1

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (c) 2026 Aqara P3 contributors
 
-"""On-demand bounded Telnet control, using the bundled native adapter."""
+"""Independent persistent data/control sessions with bounded commands."""
 
 import asyncio
 import base64
@@ -76,6 +76,10 @@ class P3Control:
         self.config = config
         self.expected_uid = expected_uid
         self.session = CommandSession(config)
+        self.data_session = CommandSession(config)
+        self.data_lock = asyncio.Lock()
+        self.local_led = False
+        self._led_state = None
         self.capture_session = None
         self.capture_pid = None
         self.last_capture_result = None
@@ -92,12 +96,18 @@ class P3Control:
             raise InvalidData("Control currently requires verified firmware 4.0.4")
 
     async def _prepare(self, session):
+        if (
+            getattr(session, "connected", False)
+            and session.connection_id is not None
+            and getattr(session, "_prepared_connection", None) == session.connection_id
+        ):
+            return
         await self._verify_device(session)
         result = await session.run(f"busybox sha256sum {REMOTE} 2>/dev/null || true")
         if not re.search(r"(?m)^" + SHA256 + r"\s", result):
             payload = await asyncio.to_thread(native_payload)
             # BusyBox's interactive line editor loses pasted data while echoing
-            # large heredocs. Disable echo on this disposable session only.
+            # large heredocs. Disable echo on this session only.
             # stty flushes queued input, so send no next command until it settles.
             await session._send_line("busybox stty -echo")
             await asyncio.sleep(0.3)
@@ -105,15 +115,61 @@ class P3Control:
                 await session._until([PROMPT], limit=8192)
             lines = "\n".join(payload[i : i + 768] for i in range(0, len(payload), 768))
             # Fixed filenames and generated base64 only; no user shell text.
-            cmd = f"busybox base64 -d <<'P3_NATIVE_EOF' | busybox bzcat > {REMOTE}.new\n{lines}\nP3_NATIVE_EOF"
+            temporary = REMOTE + "." + uuid.uuid4().hex + ".new"
+            cmd = f"busybox base64 -d <<'P3_NATIVE_EOF' | busybox bzcat > {temporary}\n{lines}\nP3_NATIVE_EOF"
             await session.run(cmd, timeout=15)
-            result = await session.run(f"busybox sha256sum {REMOTE}.new")
+            result = await session.run(f"busybox sha256sum {temporary}")
             if not re.search(r"(?m)^" + SHA256 + r"\s", result):
                 raise InvalidData("Upload checksum mismatch")
-            await session.run(f"chmod 700 {REMOTE}.new && mv {REMOTE}.new {REMOTE}")
+            await session.run(f"chmod 700 {temporary} && mv {temporary} {REMOTE}")
         result = await session.run(f"{REMOTE} version")
         if "p3lan-native-1" not in result:
             raise InvalidData("Native helper version mismatch")
+        session._prepared_connection = session.connection_id
+
+    async def sync_data_led(self, enabled=None):
+        """Bind ordinary status lighting to the authenticated data login shell."""
+        async with self.data_lock:
+            if enabled is not None:
+                self.local_led = enabled
+            session = self.data_session
+            if not self.local_led and enabled is None:
+                return
+            if session.connected and self._led_state == (
+                session.connection_id,
+                self.local_led,
+            ):
+                return
+            try:
+                async with asyncio.timeout(30):
+                    await self._prepare(session)
+                    fingerprint = await session.run("busybox sha256sum /bin/ha_basis")
+                    if not re.search(
+                        r"(?m)^331b5e32feae71fc2f68ee6328ab86a428481841caf510ff8373875a90202687\s",
+                        fingerprint,
+                    ):
+                        raise InvalidData(
+                            "Status lighting requires verified basis firmware"
+                        )
+                    token = session.connection_id
+                    if self.local_led:
+                        # Register before claim: even a lost response is cleaned up.
+                        await session.run(
+                            f"trap '{REMOTE} led-session release {token} >/dev/null 2>&1' EXIT; "
+                            "trap 'exit 0' HUP; "
+                            f"{REMOTE} led-session claim {token}",
+                            timeout=14,
+                        )
+                    else:
+                        # Reset also invalidates an older half-open session's lease.
+                        await session.run(
+                            f"{REMOTE} led-session reset {token} && trap - EXIT HUP",
+                            timeout=14,
+                        )
+                    self._led_state = (token, self.local_led)
+            except BaseException:
+                await session.close()
+                raise
 
     async def local_mode(self, action):
         if action not in ("status", "enable", "disable"):
@@ -192,8 +248,9 @@ class P3Control:
                     ):
                         raise LocalModeError("verification_failed")
                     return state
-            finally:
+            except BaseException:
                 await self.session.close()
+                raise
 
     async def _ipc(self, method, params, *, target=512):
         if self.capture_session is not None:
@@ -280,8 +337,9 @@ class P3Control:
                                 raise CommandError("Missing property value")
                             seen.add(key)
                     return reply
-            finally:
+            except BaseException:
                 await self.session.close()
+                raise
 
     async def audio_read(self):
         keys = ((5, 2), (9, 5))
@@ -292,10 +350,10 @@ class P3Control:
 
     async def read_energy(self):
         """Read the native integrator without invoking or stopping the IR service."""
-        async with self._lock:
+        async with self.data_lock:
             try:
-                await self._prepare(self.session)
-                hashes = await self.session.run(
+                await self._prepare(self.data_session)
+                hashes = await self.data_session.run(
                     "sha256sum /bin/mha_ir /lib/libha_ir.so"
                 )
                 expected = {
@@ -309,9 +367,10 @@ class P3Control:
                         found[fields[1]] = fields[0]
                 if found != expected:
                     raise InvalidData("电量读取不支持当前原厂程序版本")
-                return json.loads(await self.session.run(f"{REMOTE} energy"))
-            finally:
-                await self.session.close()
+                return json.loads(await self.data_session.run(f"{REMOTE} energy"))
+            except BaseException:
+                await self.data_session.close()
+                raise
 
     async def audio_write(self, siid, piid, value):
         # Only expose investigated operations; never arbitrary MIOT writes.
@@ -425,3 +484,4 @@ class P3Control:
         if self.capture_pid:
             await self._stop_capture_process()
         await self.session.close()
+        await self.data_session.close()

@@ -236,7 +236,10 @@ async def test_control_checks_device_script_and_postconditions(reply):
         with pytest.raises(LocalModeError):
             await control.local_mode("enable")
     control._prepare.assert_awaited_once()
-    control.session.close.assert_awaited_once()
+    if reply == LOCAL:
+        control.session.close.assert_not_awaited()
+    else:
+        control.session.close.assert_awaited_once()
     assert control.session.run.await_count == 2
     with pytest.raises(InvalidData):
         await control.local_mode("enable; command")

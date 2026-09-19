@@ -99,10 +99,10 @@ async def test_unsupported_firmware_never_reads_process_memory():
 
     control = P3Control(DeviceConfig("127.0.0.1"), "p3_020000000001")
     control._prepare = AsyncMock()
-    control.session = AsyncMock()
-    control.session.run.return_value = "wrong /bin/mha_ir\nwrong /lib/libha_ir.so"
+    control.data_session = AsyncMock()
+    control.data_session.run.return_value = "wrong /bin/mha_ir\nwrong /lib/libha_ir.so"
     with pytest.raises(InvalidData, match="程序版本"):
         await control.read_energy()
-    assert control.session.run.await_count == 1
-    assert "energy" not in control.session.run.call_args.args[0]
-    control.session.close.assert_awaited_once()
+    assert control.data_session.run.await_count == 1
+    assert "energy" not in control.data_session.run.call_args.args[0]
+    control.data_session.close.assert_awaited_once()

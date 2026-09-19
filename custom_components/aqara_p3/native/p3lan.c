@@ -321,6 +321,68 @@ static int local_mode(const char *script,const char *action,int lock,const char 
  }
 }
 
+/* The login shell owns the LED lease. Short-lived invocations serialize both
+ * the ownership check and the native lamp command; no watcher is required.
+ * Keep this inode even after release: unlinking a flock file creates races. */
+#ifndef P3_LED_OWNER
+#define P3_LED_OWNER "/tmp/aqara-p3-led-session"
+#endif
+#ifndef P3_AGENT_SOCKET
+#define P3_AGENT_SOCKET "/tmp/miio_agent.socket"
+#endif
+#ifndef P3_IPC_LOCK
+#define P3_IPC_LOCK "/tmp/aqara-p3-ipc.lock"
+#endif
+/* mbasis_cli and IPC share agent address 8192. Serialize only these short
+ * exchanges, never a sensor read or the duration of an IR capture. */
+static int ipc_lock(void) {
+ int fd=open(P3_IPC_LOCK,O_CREAT|O_RDWR|O_NOFOLLOW|O_CLOEXEC,0600);
+ if(fd<0)return -1;
+ if(flock(fd,LOCK_EX)) {close(fd);return -1;}
+ return fd;
+}
+static int lamp_off(int off) {
+ int lock=ipc_lock(); if(lock<0)return 3;
+ int fd=socket(AF_UNIX,SOCK_SEQPACKET,0); if(fd<0){close(lock);return 3;}
+ struct timeval timeout={2,0};
+ setsockopt(fd,SOL_SOCKET,SO_RCVTIMEO,&timeout,sizeof(timeout));
+ setsockopt(fd,SOL_SOCKET,SO_SNDTIMEO,&timeout,sizeof(timeout));
+ struct sockaddr_un addr={.sun_family=AF_UNIX}; strcpy(addr.sun_path,P3_AGENT_SOCKET);
+ int rc=3;
+ if(connect(fd,(struct sockaddr *)&addr,sizeof(addr)))goto finish;
+ const char bind[]="{\"method\":\"bind\",\"address\":8192}";
+ char request[160];
+ snprintf(request,sizeof(request),"{\"_to\":1,\"id\":1,\"method\":\"basis.system\",\"params\":{\"name\":\"system_lampoff\",\"value\":\"%d\"}}",off);
+ if(send(fd,bind,sizeof(bind)-1,MSG_NOSIGNAL)!=(ssize_t)sizeof(bind)-1 ||
+    send(fd,request,strlen(request),MSG_NOSIGNAL)!=(ssize_t)strlen(request))goto finish;
+ /* Like mbasis_cli, allow the agent to dispatch before closing. This event
+  * has no verified acknowledgement schema; success means IPC delivery only. */
+ char reply[1024]; recv(fd,reply,sizeof(reply),0); rc=0;
+finish:
+ close(fd); close(lock); return rc;
+}
+static int led_session(const char *action,const char *token) {
+ int claim=!strcmp(action,"claim"),release=!strcmp(action,"release"),reset=!strcmp(action,"reset");
+ if((!claim && !release && !reset) || strlen(token)!=32 || strspn(token,"0123456789abcdef")!=32)return 2;
+ int fd=open(P3_LED_OWNER,O_CREAT|O_RDWR|O_NOFOLLOW|O_CLOEXEC,0600); if(fd<0)return 3;
+ int rc=3; struct stat st;
+ if(fstat(fd,&st) || !S_ISREG(st.st_mode) || st.st_uid!=geteuid())goto finish;
+ double deadline=now()+5;
+ while(flock(fd,LOCK_EX|LOCK_NB)) {
+  if((errno!=EAGAIN && errno!=EWOULDBLOCK && errno!=EINTR) || now()>deadline)goto finish;
+  usleep(10000);
+ }
+ char owner[33]={0}; ssize_t n=pread(fd,owner,sizeof(owner),0);
+ if(n<0)goto finish;
+ if(release && (n!=32 || memcmp(owner,token,32))) {rc=0;goto finish;}
+ /* Write ownership first so a lost claim response can still be cleaned up. */
+ if(claim && (pwrite(fd,token,32,0)!=32 || ftruncate(fd,32)))goto finish;
+ rc=lamp_off(claim);
+ if(!rc && !claim && ftruncate(fd,0))rc=3;
+finish:
+ close(fd); return rc;
+}
+
 int main(int argc,char **argv) {
  if(argc==2 && !strcmp(argv[1],"version")){puts("p3lan-native-1");return 0;}
  /* Internal fixed-path mount calls: parent local-mode already holds flock. */
@@ -330,6 +392,9 @@ int main(int argc,char **argv) {
  signal(SIGTERM,stop); signal(SIGHUP,stop); signal(SIGINT,stop);
  prctl(PR_SET_PDEATHSIG,SIGHUP);
  if(argc==2 && !strcmp(argv[1],"energy")){alarm(4);return energy();}
+ /* Independent of IR capture/control's lock; an exiting data shell must be
+  * able to restore its lamp policy while capture is still running. */
+ if(argc==4 && !strcmp(argv[1],"led-session")){alarm(12);return led_session(argv[2],argv[3]);}
  int lock=open("/tmp/p3lan-native.lock",O_CREAT|O_RDWR,0600);
  if(lock<0 || flock(lock,LOCK_EX|LOCK_NB)<0){
   if(argc>1 && !strcmp(argv[1],"local-mode")) puts("P3_LOCAL_ERROR busy");
@@ -337,7 +402,10 @@ int main(int argc,char **argv) {
   return 6;
  }
  int rc=2;
- if(argc==3 && !strcmp(argv[1],"ipc")){alarm(8);rc=ipc(argv[2]);}
+ if(argc==3 && !strcmp(argv[1],"ipc")) {
+  alarm(8); int wire_lock=ipc_lock();
+  if(wire_lock<0)rc=3; else {rc=ipc(argv[2]);close(wire_lock);}
+ }
  else if(argc==4 && !strcmp(argv[1],"local-mode")) rc=local_mode(argv[2],argv[3],lock,argv[0]);
  else if(argc==4 && !strcmp(argv[1],"capture")) {
   int pid=number(argv[2],2,4194304),seconds=number(argv[3],1,300);

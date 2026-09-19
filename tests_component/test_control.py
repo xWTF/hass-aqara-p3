@@ -32,7 +32,7 @@ async def test_one_bounded_request_and_exact_target(control):
     control.session.run.side_effect = reply
     await control.send(DaikinP3.default())
     control.session.run.assert_awaited_once()
-    control.session.close.assert_awaited_once()
+    control.session.close.assert_not_awaited()
 
 
 @pytest.mark.parametrize("reply", ["{bad json", '{"id":0,"result":["ok"]}', "nothing"])

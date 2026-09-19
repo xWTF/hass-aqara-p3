@@ -10,6 +10,7 @@ is read from firmware, and no remote binary is installed or downloaded.
 import asyncio
 import base64
 import re
+import socket
 import uuid
 from enum import StrEnum
 
@@ -73,6 +74,7 @@ class TelnetReader:
         self._writer = None
         self._pending = ""
         self._lock = asyncio.Lock()
+        self.connection_id = None
 
     @property
     def connected(self):
@@ -82,6 +84,7 @@ class TelnetReader:
         writer, self._writer = self._writer, None
         self._reader = None
         self._pending = ""
+        self.connection_id = None
         if writer is not None:
             writer.close()
             try:
@@ -140,6 +143,9 @@ class TelnetReader:
                 send_environ=[],
                 limit=32768,
             )
+            sock = self._writer.get_extra_info("socket")
+            if sock is not None:
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
             idx, _ = await self._until([LOGIN, PASSWORD, PROMPT], limit=8192)
             if idx != 0:
                 raise AuthenticationError("未收到预期的登录提示")
@@ -153,6 +159,7 @@ class TelnetReader:
                 )
             if idx != 0:
                 raise AuthenticationError("Telnet 登录失败，请检查密码")
+            self.connection_id = uuid.uuid4().hex
 
     async def read(self, resource: Resource) -> str:
         if not isinstance(resource, Resource):

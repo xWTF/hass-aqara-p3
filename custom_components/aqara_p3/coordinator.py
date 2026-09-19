@@ -20,7 +20,6 @@ from .protocol.config import DeviceConfig
 from .protocol.control import P3Control
 from .protocol.device import ReadOnlyDevice
 from .protocol.errors import AuthenticationError, P3Error
-from .protocol.telnet import TelnetReader
 
 LOGGER = logging.getLogger(__name__)
 
@@ -31,18 +30,16 @@ class P3Coordinator(DataUpdateCoordinator[dict]):
         self.reload_options = {
             k: v for k, v in entry.options.items() if k != "local_mode"
         }
-        self.device = ReadOnlyDevice(
-            TelnetReader(
-                DeviceConfig(
-                    device_ip=entry.data[CONF_HOST],
-                    telnet_password=entry.data.get(CONF_PASSWORD, ""),
-                    poll_interval=entry.options.get(
-                        CONF_POLL_INTERVAL, DEFAULT_POLL_INTERVAL
-                    ),
-                )
-            )
+        config = DeviceConfig(
+            device_ip=entry.data[CONF_HOST],
+            telnet_password=entry.data.get(CONF_PASSWORD, ""),
+            poll_interval=entry.options.get(CONF_POLL_INTERVAL, DEFAULT_POLL_INTERVAL),
         )
         self.expected_uid = entry.unique_id
+        self.control = P3Control(config, self.expected_uid)
+        self.control.local_led = entry.options.get("local_mode", False)
+        self.device = ReadOnlyDevice(self.control.data_session)
+        self.led_error = None
         self.identity = None
         self.last_cache_read = None
         self._update_task = None
@@ -56,7 +53,6 @@ class P3Coordinator(DataUpdateCoordinator[dict]):
             ),
             always_update=False,
         )
-        self.control = P3Control(self.device.transport.config, self.expected_uid)
         self.ac = ACController(self, entry)
         self.audio = AudioCoordinator(hass, entry, self)
         self.local_mode = LocalModeController(self, entry)
@@ -68,12 +64,25 @@ class P3Coordinator(DataUpdateCoordinator[dict]):
         self._update_task = task
         try:
             async with asyncio.timeout(UPDATE_TIMEOUT):
-                snapshot = await self.device.snapshot()
+                async with self.control.data_lock:
+                    snapshot = await self.device.snapshot()
             if snapshot.identity.uid != self.expected_uid:
                 raise AuthenticationError("设备标识改变")
             self.identity = snapshot.identity
             self.last_cache_read = snapshot.acquired_at
             values = dict(snapshot.values)
+            try:
+                await self.control.sync_data_led()
+                self.led_error = None
+            except (P3Error, OSError, TimeoutError, ValueError) as error:
+                message = (
+                    str(error) if isinstance(error, P3Error) else type(error).__name__
+                )
+                if message != self.led_error:
+                    LOGGER.warning(
+                        "Could not apply local mode status lighting: %s", message
+                    )
+                self.led_error = message
             try:
                 async with asyncio.timeout(8):
                     sample = await self.control.read_energy()
@@ -113,10 +122,10 @@ class P3Coordinator(DataUpdateCoordinator[dict]):
         await super().async_shutdown()
         await self.local_mode.shutdown()
         await self.audio.async_shutdown()
-        await self.ac.shutdown()
         task = self._update_task
         if task is not None and task is not asyncio.current_task():
             task.cancel()
             await asyncio.gather(task, return_exceptions=True)
+        await self.ac.shutdown()
         await self.device.close()
         await self.energy.shutdown()

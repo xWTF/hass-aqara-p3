@@ -54,6 +54,7 @@ class LocalModeController:
                     return
                 action = "enable" if self.entry.options["local_mode"] else "disable"
                 self.state = await self.parent.control.local_mode(action)
+                await self.parent.control.sync_data_led(action == "enable")
                 self.last_error = None
         except (P3Error, OSError, TimeoutError, ValueError) as err:
             code = err.code if isinstance(err, LocalModeError) else "unavailable"
@@ -84,6 +85,7 @@ class LocalModeController:
                     self.state = await self.parent.control.local_mode(
                         "enable" if enabled else "disable"
                     )
+                    await self.parent.control.sync_data_led(enabled)
                 except (P3Error, OSError, TimeoutError, ValueError) as err:
                     self.state = None
                     self.last_error = (

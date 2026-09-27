@@ -156,9 +156,7 @@ class AudioCoordinator(DataUpdateCoordinator):
         task = asyncio.current_task()
         try:
             for remaining in range(repeat - 1, -1, -1):
-                next_play = (
-                    self.hass.loop.time() + duration + (REPEAT_GAP if remaining else 0)
-                )
+                next_play = self.hass.loop.time() + duration + REPEAT_GAP
                 wake = next_play if deadline is None else min(next_play, deadline)
                 await asyncio.sleep(max(0, wake - self.hass.loop.time()))
                 async with self._command_lock:
@@ -170,6 +168,11 @@ class AudioCoordinator(DataUpdateCoordinator):
                         return
                     if remaining:
                         await self._send(1, payload)
+                    else:
+                        # The factory player does not close its scene when the
+                        # WAV reaches EOF. Finalize it explicitly so status
+                        # lighting does not remain in the playback state.
+                        await self._send(4, 1)
         except HomeAssistantError:
             LOGGER.exception("Sound sequence ended: audio command was not confirmed")
         finally:

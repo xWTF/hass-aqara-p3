@@ -34,5 +34,5 @@ SOUND_DURATIONS = {
     "Dog": 4.19809375,
 }
 
-# Allow the factory audio worker to start/drain before sending another play.
+# Allow the factory audio worker to drain before another play or the final stop.
 REPEAT_GAP = 0.3

@@ -5,7 +5,7 @@ import asyncio
 import json
 import shlex
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, call
 
 import pytest
 from homeassistant.exceptions import HomeAssistantError
@@ -131,9 +131,10 @@ async def finish_playback(audio):
 async def test_play_defaults_and_natural_finish(audio):
     await audio.play()
     await finish_playback(audio)
-    audio.parent.control.audio_write.assert_awaited_once_with(
-        9, 1, '{"name":"DingDong","volume":40}'
-    )
+    assert audio.parent.control.audio_write.await_args_list == [
+        call(9, 1, '{"name":"DingDong","volume":40}'),
+        call(9, 4, 1),
+    ]
 
 
 async def test_repeat_exact_count_and_fixed_volume(audio):
@@ -141,8 +142,12 @@ async def test_repeat_exact_count_and_fixed_volume(audio):
     audio.data["volume"] = 90
     await finish_playback(audio)
     calls = audio.parent.control.audio_write.call_args_list
-    assert len(calls) == 3
-    assert all(c.args == (9, 1, '{"name":"DingDong","volume":12}') for c in calls)
+    assert calls == [
+        call(9, 1, '{"name":"DingDong","volume":12}'),
+        call(9, 1, '{"name":"DingDong","volume":12}'),
+        call(9, 1, '{"name":"DingDong","volume":12}'),
+        call(9, 4, 1),
+    ]
 
 
 async def test_time_limit_stops_current_play_and_future_repeats(audio):
@@ -160,6 +165,7 @@ async def test_repeat_count_finishes_before_long_deadline(audio):
     assert [c.args[1] for c in audio.parent.control.audio_write.call_args_list] == [
         1,
         1,
+        4,
     ]
 
 
@@ -176,6 +182,7 @@ async def test_new_play_cancels_old_deadline_and_repeats(audio):
         1,
         1,
         1,
+        4,
     ]
 
 

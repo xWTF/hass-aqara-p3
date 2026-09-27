@@ -16,11 +16,13 @@ from homeassistant.helpers.storage import Store
 from .const import DOMAIN, OUTLET_RUNNING_POWER_W
 from .protocol.errors import P3Error
 from .protocol.profiles.daikin_p3 import (
+    FEATURES,
     MODES,
     POWERFUL_DURATION,
     POWERFUL_MODES,
     RANGES,
     DaikinP3,
+    feature_available,
 )
 
 LOGGER = logging.getLogger(__name__)
@@ -57,8 +59,7 @@ class ACController:
             return
         try:
             self.state = DaikinP3.from_hex(doc["state"])
-            if self.state.mode not in POWERFUL_MODES:
-                self.state = self.state.changed(powerful=False)
+            self.state = self._sanitize_mode_features(self.state)
             self._load_mode_preferences(doc.get("mode_preferences", {}))
             self._remember_mode(self.state)
             self.valid = bool(doc.get("valid", False))
@@ -116,6 +117,15 @@ class ACController:
             fields.add("dry_offset")
         return fields
 
+    @staticmethod
+    def _sanitize_mode_features(state):
+        disabled = {
+            feature: False
+            for feature in FEATURES
+            if state.feature(feature) and not feature_available(state.mode, feature)
+        }
+        return state.changed(**disabled) if disabled else state
+
     def _load_mode_preferences(self, saved):
         self.mode_preferences = {}
         if not isinstance(saved, dict):
@@ -134,6 +144,18 @@ class ACController:
         self.mode_preferences[state.mode] = {
             field: getattr(state, field) for field in self._mode_fields(state.mode)
         }
+
+    def _dry_preferences_with_offset(self, state, value):
+        preferences = self.mode_preferences.get("dry")
+        if preferences is None:
+            dry = state if state.mode == "dry" else state.changed(mode="dry")
+            preferences = {
+                field: getattr(dry, field) for field in self._mode_fields("dry")
+            }
+        preferences = {**preferences, "dry_offset": value}
+        # Validate local-only changes through the same protocol rules as a command.
+        DaikinP3.default().changed(mode="dry", **preferences)
+        return preferences
 
     def remaining_state(self):
         state = self.state
@@ -210,13 +232,28 @@ class ACController:
                     await self.save()
                     self.coordinator.async_update_listeners()
                     self._schedule_timer()
+                base = self.remaining_state()
+                mode = changes.get("mode", base.mode)
+                dry_preferences = None
+                if "dry_offset" in changes and mode != "dry":
+                    dry_preferences = self._dry_preferences_with_offset(
+                        base, changes["dry_offset"]
+                    )
+                    changes = {
+                        key: value
+                        for key, value in changes.items()
+                        if key != "dry_offset"
+                    }
+                    if not changes and timers is None:
+                        self.mode_preferences["dry"] = dry_preferences
+                        self.coordinator.async_update_listeners()
+                        await self.save()
+                        return
                 if self.power_confirmation_required and "power" not in changes:
                     raise HomeAssistantError(
                         translation_domain=DOMAIN,
                         translation_key="timer_power_required",
                     )
-                base = self.remaining_state()
-                mode = changes.get("mode", base.mode)
                 remembered = (
                     self.mode_preferences.get(mode, {}) if mode != base.mode else {}
                 )
@@ -225,17 +262,24 @@ class ACController:
                         translation_domain=DOMAIN,
                         translation_key="powerful_mode_required",
                     )
+                if mode == "dry" and any(
+                    changes.get(feature) is True
+                    for feature in ("rapid", "outdoor_quiet")
+                ):
+                    raise HomeAssistantError(
+                        translation_domain=DOMAIN,
+                        translation_key="dry_feature_unavailable",
+                    )
                 effective = {**remembered, **changes}
-                if (
-                    mode not in POWERFUL_MODES
-                    or changes.get("power") is False
-                    or (
-                        base.feature("powerful")
-                        and (
-                            "temperature" in changes
-                            or "fan" in changes
-                            or mode != base.mode
-                        )
+                for feature in FEATURES:
+                    if not feature_available(mode, feature):
+                        effective[feature] = False
+                if changes.get("power") is False or (
+                    base.feature("powerful")
+                    and (
+                        "temperature" in changes
+                        or "fan" in changes
+                        or mode != base.mode
                     )
                 ):
                     effective["powerful"] = False
@@ -272,6 +316,8 @@ class ACController:
                     ) from None
                 self.state = state
                 self._remember_mode(state)
+                if dry_preferences is not None:
+                    self.mode_preferences["dry"] = dry_preferences
                 self.deadlines = deadlines
                 if not state.feature("powerful"):
                     self.powerful_deadline = None
@@ -284,6 +330,37 @@ class ACController:
                 self.updated_at = time.time()
                 self.coordinator.async_update_listeners()
                 await self.save()
+        finally:
+            self._command_tasks.discard(task)
+
+    async def clean(self):
+        if self.profile != "daikin_p3":
+            raise HomeAssistantError(
+                "Select the Daikin E-Max 7 profile in integration options"
+            )
+        if self.capture_task and not self.capture_task.done():
+            raise HomeAssistantError("Stop infrared capture first")
+        if not self.coordinator.last_update_success:
+            raise HomeAssistantError("P3 is unavailable")
+        task = asyncio.current_task()
+        self._command_tasks.add(task)
+        try:
+            async with self._lock:
+                if self._expire_timers_locked():
+                    await self.save()
+                    self.coordinator.async_update_listeners()
+                    self._schedule_timer()
+                if not self.valid or self.state.power:
+                    raise HomeAssistantError(
+                        translation_domain=DOMAIN,
+                        translation_key="clean_power_off_required",
+                    )
+                try:
+                    await self.coordinator.control.clean()
+                except (P3Error, OSError, TimeoutError, UnicodeError):
+                    raise HomeAssistantError(
+                        "P3 did not confirm the clean command; it was not retried"
+                    ) from None
         finally:
             self._command_tasks.discard(task)
 
@@ -387,14 +464,13 @@ class ACController:
         frames = [
             f
             for f in self.capture_result.get("frames", [])
-            if f.get("profile") == "daikin_p3"
+            if f.get("profile") == "daikin_p3" and f.get("state_hex")
         ]
         if not frames:
             raise HomeAssistantError("No matching Daikin state captured")
         async with self._lock:
             self.state = DaikinP3.from_hex(frames[-1]["state_hex"])
-            if self.state.mode not in POWERFUL_MODES:
-                self.state = self.state.changed(powerful=False)
+            self.state = self._sanitize_mode_features(self.state)
             self._remember_mode(self.state)
             self.valid = True
             self.source = "received_remote"

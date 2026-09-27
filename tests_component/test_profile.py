@@ -10,6 +10,7 @@ from custom_components.aqara_p3.protocol.capture import (
     CaptureDecoder,
     crc_x25,
     decode_daikin,
+    decode_daikin_command,
 )
 from custom_components.aqara_p3.protocol.errors import InvalidData
 from custom_components.aqara_p3.protocol.heatshrink import (
@@ -17,7 +18,11 @@ from custom_components.aqara_p3.protocol.heatshrink import (
     decompress,
     encode_pulses,
 )
-from custom_components.aqara_p3.protocol.profiles.daikin_p3 import DaikinP3
+from custom_components.aqara_p3.protocol.profiles.daikin_p3 import (
+    CLEAN_COMMAND,
+    DaikinP3,
+    command_pulses,
+)
 
 
 def fixture(name):
@@ -55,6 +60,29 @@ def test_labelled_sweeps():
         assert base.changed(dry_offset=-2 + i / 2).raw == bytes.fromhex(row["hex"])
 
 
+def test_mold_bit_is_persistent_in_running_and_off_states():
+    running_on = DaikinP3.from_hex("11da270000313400a0000000000000c580005c")
+    running_off = DaikinP3.from_hex("11da270000313400a0000000000000c50000dc")
+    powered_off_without_mold = DaikinP3.from_hex(
+        "11da270000303400a0000000000000c540001b"
+    )
+    powered_off_with_mold = DaikinP3.from_hex("11da270000303400a0000000000000c5c0009b")
+    assert running_on.feature("mold") and not running_off.feature("mold")
+    assert running_on.changed(mold=False) == running_off
+    assert not powered_off_without_mold.power and not powered_off_without_mold.feature(
+        "mold"
+    )
+    assert powered_off_without_mold.changed(mold=True) == powered_off_with_mold
+    assert powered_off_with_mold.changed(power=True) == running_on
+
+
+def test_clean_operation_is_repeatable_short_command():
+    pulses = command_pulses(CLEAN_COMMAND)
+    assert len(pulses) == 144
+    assert decode_daikin(pulses) is None
+    assert decode_daikin_command(pulses) == "clean_operation"
+
+
 def test_timer_packing_and_cancellation():
     rows = fixture("timers")
     base = DaikinP3.from_hex(rows[3]["hex"])
@@ -86,6 +114,7 @@ def test_timer_packing_and_cancellation():
         {"swing": "sideways"},
         {"dry_offset": 1},
         {"powerful": "true"},
+        {"mold": "true"},
     ],
 )
 def test_reject_invalid_state(changes):
@@ -148,6 +177,16 @@ def test_capture_fragmentation_crc_and_unknown_protocol():
     raw += crc_x25(raw).to_bytes(2, "big")
     decoder.feed(raw)
     assert decoder.frames[-1]["profile"] is None
+
+    clean = command_pulses(CLEAN_COMMAND)
+    raw = b"\xff\xfe\x00\x26" + (len(clean) * 2).to_bytes(2, "big")
+    raw += struct.pack(f">{len(clean)}H", *clean)
+    raw += crc_x25(raw).to_bytes(2, "big")
+    decoder.feed(raw)
+    record = decoder.frames[-1]
+    assert record["profile"] == "daikin_p3"
+    assert record["state_hex"] is None
+    assert record["command"] == "clean_operation"
 
 
 def test_codec_limit_and_roundtrip():

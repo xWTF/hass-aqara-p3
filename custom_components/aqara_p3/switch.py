@@ -4,7 +4,7 @@
 from homeassistant.components.switch import SwitchEntity, SwitchEntityDescription
 
 from .entity import P3Entity
-from .protocol.profiles.daikin_p3 import FEATURES, POWERFUL_MODES
+from .protocol.profiles.daikin_p3 import FEATURES, feature_available
 
 PARALLEL_UPDATES = 0
 
@@ -25,8 +25,8 @@ class P3Switch(P3Entity, SwitchEntity):
 
     @property
     def available(self):
-        return super().available and (
-            self.key != "powerful" or self.coordinator.ac.state.mode in POWERFUL_MODES
+        return super().available and feature_available(
+            self.coordinator.ac.state.mode, self.key
         )
 
     @property

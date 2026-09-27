@@ -16,23 +16,36 @@ async def async_setup_entry(hass, entry, async_add_entities):
         P3SoundButton(co.audio, "stop_sound"),
     ]
     if co.ac.profile == "daikin_p3":
-        entities.append(P3Button(co))
+        entities.extend(
+            [P3Button(co, "cancel_timers"), P3Button(co, "clean_operation")]
+        )
     async_add_entities(entities)
 
 
 class P3Button(P3Entity, ButtonEntity):
-    def __init__(self, coordinator):
+    def __init__(self, coordinator, key):
         super().__init__(
             coordinator,
             ButtonEntityDescription(
-                key="cancel_timers",
-                translation_key="cancel_timers",
-                entity_registry_enabled_default=False,
+                key=key,
+                translation_key=key,
+                entity_registry_enabled_default=key != "cancel_timers",
             ),
+        )
+        self.key = key
+
+    @property
+    def available(self):
+        return super().available and (
+            self.key != "clean_operation"
+            or (self.coordinator.ac.valid and not self.coordinator.ac.state.power)
         )
 
     async def async_press(self):
-        await self.coordinator.ac.apply(timers={"on": 0, "off": 0, "sleep": 0})
+        if self.key == "clean_operation":
+            await self.coordinator.ac.clean()
+        else:
+            await self.coordinator.ac.apply(timers={"on": 0, "off": 0, "sleep": 0})
 
 
 class P3SoundButton(AudioEntity, ButtonEntity):

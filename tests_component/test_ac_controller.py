@@ -90,6 +90,37 @@ async def test_disabling_boost_does_not_restore_cancelled_features(controller):
     )
 
 
+async def test_mold_can_be_toggled_while_running_and_off(controller):
+    await controller.apply(power=True, mode="cool", mold=False)
+    assert not controller.state.feature("mold")
+    await controller.apply(mold=True)
+    assert controller.state.power and controller.state.feature("mold")
+    await controller.apply(power=False)
+    assert not controller.state.power and controller.state.feature("mold")
+    await controller.apply(mold=False)
+    assert not controller.state.power and not controller.state.feature("mold")
+
+
+async def test_clean_button_requires_confirmed_power_off(controller):
+    from custom_components.aqara_p3.button import P3Button
+
+    button = P3Button(controller.coordinator, "clean_operation")
+    assert not button.available
+    await controller.apply(power=True)
+    assert not button.available
+    with pytest.raises(HomeAssistantError) as error:
+        await controller.clean()
+    assert error.value.translation_key == "clean_power_off_required"
+    await controller.apply(power=False)
+    assert button.available
+    state = controller.state
+    before = controller.coordinator.control.send.await_count
+    await button.async_press()
+    controller.coordinator.control.clean.assert_awaited_once_with()
+    assert controller.coordinator.control.send.await_count == before
+    assert controller.state == state
+
+
 async def test_error_is_not_retried_and_uncertainty_persisted(controller):
     controller.coordinator.control.send.side_effect = CommandError("timeout")
     with pytest.raises(HomeAssistantError):
@@ -440,6 +471,25 @@ async def test_switching_modes_restores_each_temperature_and_fan(controller):
     assert controller.state.fan == "3"
 
 
+async def test_dry_offset_can_be_saved_in_other_mode_without_sending(controller):
+    from custom_components.aqara_p3.select import P3DrySelect
+
+    await controller.apply(mode="cool", power=True, temperature=27)
+    entity = P3DrySelect(controller.coordinator)
+    assert entity.available and entity.current_option == "0"
+    state = controller.state
+    before = controller.coordinator.control.send.await_count
+    await entity.async_select_option("+1.5")
+    assert controller.coordinator.control.send.await_count == before
+    assert controller.state == state and entity.current_option == "+1.5"
+    assert controller.mode_preferences["dry"] == {
+        "dry_offset": 1.5,
+        "fan": "auto",
+    }
+    await controller.apply(mode="dry")
+    assert controller.coordinator.control.send.call_args.args[0].dry_offset == 1.5
+
+
 async def test_explicit_new_values_override_mode_memory(controller):
     await controller.apply(mode="cool", temperature=28, fan="5")
     await controller.apply(mode="heat", temperature=20, fan="quiet")
@@ -551,6 +601,30 @@ async def test_powerful_disabled_and_rejected_outside_cool_heat(controller, mode
         await controller.apply(powerful=True)
     assert error.value.translation_key == "powerful_mode_required"
     assert controller.coordinator.control.send.await_count == before
+
+
+@pytest.mark.parametrize("feature", ["powerful", "rapid", "outdoor_quiet"])
+async def test_dry_mode_disables_and_rejects_incompatible_features(controller, feature):
+    from custom_components.aqara_p3.switch import P3Switch
+
+    await controller.apply(mode="dry", power=True)
+    entity = P3Switch(controller.coordinator, feature)
+    assert not entity.available
+    before = controller.coordinator.control.send.await_count
+    with pytest.raises(HomeAssistantError) as error:
+        await controller.apply(**{feature: True})
+    assert error.value.translation_key == (
+        "powerful_mode_required" if feature == "powerful" else "dry_feature_unavailable"
+    )
+    assert controller.coordinator.control.send.await_count == before
+
+
+@pytest.mark.parametrize("feature", ["powerful", "rapid", "outdoor_quiet"])
+async def test_switching_to_dry_clears_incompatible_features(controller, feature):
+    await controller.apply(mode="cool", power=True, **{feature: True})
+    await controller.apply(mode="dry")
+    sent = controller.coordinator.control.send.call_args.args[0]
+    assert sent.mode == "dry" and not sent.feature(feature)
 
 
 @pytest.mark.parametrize(

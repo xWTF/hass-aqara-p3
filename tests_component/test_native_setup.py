@@ -57,7 +57,7 @@ async def test_native_platform_setup_and_unload(hass, identity, snapshot, monkey
     assert entry.state == ConfigEntryState.LOADED
     registry = er.async_get(hass)
     entities = er.async_entries_for_config_entry(registry, entry.entry_id)
-    assert len(entities) == 20
+    assert len(entities) == 22
     disabled = {
         "chip_temperature",
         "on_timer",
@@ -86,6 +86,16 @@ async def test_native_platform_setup_and_unload(hass, identity, snapshot, monkey
     sent = control.send.call_args.args[0]
     assert sent.power and sent.mode == "cool" and sent.temperature == 28.5
     assert hass.states.get(climate.entity_id).state == "cool"
+    clean = next(e for e in entities if e.unique_id.endswith("_clean_operation"))
+    assert hass.states.get(clean.entity_id).state == "unavailable"
+    await hass.services.async_call(
+        "climate", "turn_off", {"entity_id": climate.entity_id}, blocking=True
+    )
+    assert hass.states.get(clean.entity_id).state != "unavailable"
+    await hass.services.async_call(
+        "button", "press", {"entity_id": clean.entity_id}, blocking=True
+    )
+    control.clean.assert_awaited_once_with()
     hass.states.async_set("sensor.room", "77", {"unit_of_measurement": "°F"})
     await hass.async_block_till_done()
     assert hass.states.get(climate.entity_id).attributes["current_temperature"] == 25
@@ -177,17 +187,20 @@ async def test_native_platform_setup_and_unload(hass, identity, snapshot, monkey
     await asyncio.wait_for(entry.runtime_data.audio._playback_task, 1)
     control.audio_write.assert_awaited_with(9, 4, 1)
     dry = next(e for e in entities if e.unique_id.endswith("_dry_offset"))
-    assert dry.domain == "select"
-    await hass.services.async_call(
-        "climate",
-        "set_hvac_mode",
-        {"entity_id": climate.entity_id, "hvac_mode": "dry"},
-        blocking=True,
-    )
+    assert dry.domain == "select" and hass.states.get(dry.entity_id).state == "0"
+    before = control.send.await_count
     await hass.services.async_call(
         "select",
         "select_option",
         {"entity_id": dry.entity_id, "option": "-1.5"},
+        blocking=True,
+    )
+    assert control.send.await_count == before
+    assert hass.states.get(dry.entity_id).state == "-1.5"
+    await hass.services.async_call(
+        "climate",
+        "set_hvac_mode",
+        {"entity_id": climate.entity_id, "hvac_mode": "dry"},
         blocking=True,
     )
     assert control.send.call_args.args[0].dry_offset == -1.5

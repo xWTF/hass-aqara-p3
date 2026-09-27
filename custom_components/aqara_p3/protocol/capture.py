@@ -7,7 +7,7 @@ import struct
 from datetime import datetime, timezone
 
 from .errors import InvalidData
-from .profiles.daikin_p3 import DaikinP3
+from .profiles.daikin_p3 import CLEAN_COMMAND, DaikinP3
 
 
 def crc_x25(data):
@@ -19,22 +19,33 @@ def crc_x25(data):
     return crc ^ 0xFFFF
 
 
-def decode_daikin(pulses):
-    if len(pulses) != 320:
+def _decode_daikin_bytes(pulses, size):
+    if len(pulses) != 16 + size * 16:
         return None
     if not (3000 < pulses[12] < 4000 and 1400 < pulses[13] < 2000):
         return None
     bits = []
-    for i in range(14, 318, 2):
+    for i in range(14, len(pulses) - 2, 2):
         mark, space = pulses[i : i + 2]
         if not 250 < mark < 700 or not (250 < space < 700 or 1000 < space < 1900):
             return None
         bits.append(int(space > 800))
-    state = bytes(sum(bits[i + j] << j for j in range(8)) for i in range(0, 152, 8))
+    return bytes(sum(bits[i + j] << j for j in range(8)) for i in range(0, size * 8, 8))
+
+
+def decode_daikin(pulses):
+    state = _decode_daikin_bytes(pulses, 19)
+    if state is None:
+        return None
     try:
         return DaikinP3(state)
     except InvalidData:
         return None
+
+
+def decode_daikin_command(pulses):
+    command = _decode_daikin_bytes(pulses, len(CLEAN_COMMAND))
+    return "clean_operation" if command == CLEAN_COMMAND else None
 
 
 class CaptureDecoder:
@@ -77,13 +88,16 @@ class CaptureDecoder:
                 continue
             pulses = list(struct.unpack(f">{size // 2}H", raw[6:-2]))
             state = decode_daikin(pulses)
+            command = decode_daikin_command(pulses)
             record = {
                 "utc": datetime.now(timezone.utc).isoformat(),
                 "uart_hex": raw.hex(),
                 "pulses": pulses,
-                "profile": "daikin_p3" if state else None,
+                "profile": "daikin_p3" if state or command else None,
                 "state_hex": state.raw.hex() if state else None,
             }
+            if command:
+                record["command"] = command
             if state:
                 record.update(
                     mode=state.mode,
@@ -92,6 +106,7 @@ class CaptureDecoder:
                     dry_offset=state.dry_offset,
                     fan=state.fan,
                     swing=state.swing,
+                    mold=state.feature("mold"),
                 )
             self.total += 1
             self.frames.append(record)

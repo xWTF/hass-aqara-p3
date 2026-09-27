@@ -17,6 +17,7 @@ from .capture import CaptureDecoder
 from .errors import InvalidData, P3Error
 from .heatshrink import encode_pulses
 from .native_info import SHA256
+from .profiles.daikin_p3 import CLEAN_COMMAND, command_pulses
 from .telnet import ANSI, PROMPT, Resource, TelnetReader
 
 REMOTE = "/tmp/p3lan-" + SHA256[:12]
@@ -398,11 +399,17 @@ class P3Control:
             "set_properties", [{"siid": siid, "piid": piid, "value": value}], target=32
         )
 
-    async def send(self, state):
-        code, length = await asyncio.to_thread(encode_pulses, state.pulses())
+    async def _send_pulses(self, pulses):
+        code, length = await asyncio.to_thread(encode_pulses, pulses)
         return await self._ipc(
             "miIO.ir_play", {"code": code, "freq": 38000, "length": length}
         )
+
+    async def send(self, state):
+        return await self._send_pulses(state.pulses())
+
+    async def clean(self):
+        return await self._send_pulses(command_pulses(CLEAN_COMMAND))
 
     async def relay(self, on):
         if type(on) is not bool:

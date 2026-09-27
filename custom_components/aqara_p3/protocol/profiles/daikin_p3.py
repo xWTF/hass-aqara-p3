@@ -19,13 +19,34 @@ FANS = {"auto": 10, "quiet": 11, "1": 3, "2": 4, "3": 5, "4": 6, "5": 7}
 RANGES = {"cool": (18, 32), "heat": (10, 30), "auto": (18, 30)}
 POWERFUL_MODES = frozenset({"cool", "heat"})
 POWERFUL_DURATION = 20 * 60
+CLEAN_COMMAND = bytes.fromhex("11 DA 27 00 84 62 00 F8")
+FEATURE_MODES = {
+    "powerful": POWERFUL_MODES,
+    "rapid": frozenset(MODES) - {"dry"},
+    "outdoor_quiet": frozenset(MODES) - {"dry"},
+}
 FEATURES = {
     "powerful": (13, 0x01),
     "rapid": (17, 0x01),
     "coanda": (17, 0x02),
     "econo": (16, 0x04),
     "outdoor_quiet": (13, 0x20),
+    "mold": (16, 0x80),
 }
+
+
+def feature_available(mode, feature):
+    """Return whether a special feature may be used in an HVAC mode."""
+    return mode in FEATURE_MODES.get(feature, MODES)
+
+
+def command_pulses(command):
+    """Encode a verified Daikin command with this remote's timings."""
+    out = [420, 440] * 5 + [420, 25200, 3500, 1700]
+    for byte in command:
+        for bit in range(8):
+            out.extend((420, 1300 if byte & (1 << bit) else 440))
+    return out + [420, 50000]
 
 
 def half(value, low, high):
@@ -45,7 +66,6 @@ class DaikinP3:
             len(self.raw) != 19
             or self.raw[:3] != b"\x11\xda\x27"
             or self.raw[15] != 0xC5
-            or not self.raw[16] & 0x80
             or sum(self.raw[:-1]) & 255 != self.raw[-1]
         ):
             raise InvalidData("Invalid Daikin P3 state/checksum")
@@ -222,8 +242,4 @@ class DaikinP3:
     def pulses(self):
         # Timings taken from the device's existing Daikin codebook. Carrier is
         # supplied by the factory transmitter; a complete 152-bit transaction.
-        out = [420, 440] * 5 + [420, 25200, 3500, 1700]
-        for byte in self.raw:
-            for bit in range(8):
-                out.extend((420, 1300 if byte & (1 << bit) else 440))
-        return out + [420, 50000]
+        return command_pulses(self.raw)

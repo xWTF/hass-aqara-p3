@@ -148,6 +148,12 @@
     "powerful_mode_required": {
       "message": "强力运转仅适用于制冷或制热模式。"
     },
+    "dry_feature_unavailable": {
+      "message": "除湿模式下无法使用室外机静音或极速运转。"
+    },
+    "clean_power_off_required": {
+      "message": "仅在确认空调已关机后才能启动洗净运转。"
+    },
     "media_http_error": {
       "message": "获取音频失败：HTTP {status}。"
     },
@@ -243,6 +249,9 @@
       },
       "outdoor_quiet": {
         "name": "室外机静音"
+      },
+      "mold": {
+        "name": "防霉模式"
       }
     },
     "number": {
@@ -268,6 +277,9 @@
       },
       "stop_sound": {
         "name": "停止音效"
+      },
+      "clean_operation": {
+        "name": "洗净运转"
       }
     },
     "select": {

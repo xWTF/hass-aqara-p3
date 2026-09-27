@@ -28,12 +28,13 @@ class P3DrySelect(P3Entity, SelectEntity):
         )
 
     @property
-    def available(self):
-        return super().available and self.coordinator.ac.state.mode == "dry"
-
-    @property
     def current_option(self):
-        value = self.coordinator.ac.state.dry_offset
+        ac = self.coordinator.ac
+        value = (
+            ac.state.dry_offset
+            if ac.state.mode == "dry"
+            else ac.mode_preferences.get("dry", {}).get("dry_offset", 0)
+        )
         return next((s for s in DRY_OPTIONS if float(s) == value), None)
 
     async def async_select_option(self, option):

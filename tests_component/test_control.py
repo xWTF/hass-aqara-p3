@@ -4,14 +4,18 @@
 import json
 import shlex
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
 from custom_components.aqara_p3.protocol.config import DeviceConfig
 from custom_components.aqara_p3.protocol.control import CommandError, P3Control
 from custom_components.aqara_p3.protocol.errors import InvalidData
-from custom_components.aqara_p3.protocol.profiles.daikin_p3 import DaikinP3
+from custom_components.aqara_p3.protocol.profiles.daikin_p3 import (
+    CLEAN_COMMAND,
+    DaikinP3,
+    command_pulses,
+)
 
 
 @pytest.fixture
@@ -33,6 +37,26 @@ async def test_one_bounded_request_and_exact_target(control):
     await control.send(DaikinP3.default())
     control.session.run.assert_awaited_once()
     control.session.close.assert_not_awaited()
+
+
+async def test_clean_sends_verified_short_command(control, monkeypatch):
+    from custom_components.aqara_p3.protocol import control as module
+
+    encoded = Mock(return_value=("encoded", 144))
+    monkeypatch.setattr(module, "encode_pulses", encoded)
+
+    async def reply(cmd):
+        request = json.loads(shlex.split(cmd)[-1])
+        assert request["params"] == {
+            "code": "encoded",
+            "freq": 38000,
+            "length": 144,
+        }
+        return json.dumps({"id": request["id"], "_from": 512, "result": ["ok"]})
+
+    control.session.run.side_effect = reply
+    await control.clean()
+    encoded.assert_called_once_with(command_pulses(CLEAN_COMMAND))
 
 
 @pytest.mark.parametrize("reply", ["{bad json", '{"id":0,"result":["ok"]}', "nothing"])

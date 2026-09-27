@@ -148,6 +148,12 @@
     "powerful_mode_required": {
       "message": "Powerful operation requires cool or heat mode."
     },
+    "dry_feature_unavailable": {
+      "message": "Outdoor unit quiet and rapid operation are unavailable in dry mode."
+    },
+    "clean_power_off_required": {
+      "message": "Clean operation can only start after the air conditioner is confirmed off."
+    },
     "media_http_error": {
       "message": "Audio download returned HTTP {status}."
     },
@@ -243,6 +249,9 @@
       },
       "outdoor_quiet": {
         "name": "Outdoor unit quiet"
+      },
+      "mold": {
+        "name": "Mold prevention"
       }
     },
     "number": {
@@ -268,6 +277,9 @@
       },
       "stop_sound": {
         "name": "Stop sound"
+      },
+      "clean_operation": {
+        "name": "Clean operation"
       }
     },
     "select": {

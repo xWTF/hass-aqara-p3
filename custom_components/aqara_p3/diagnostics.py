@@ -5,7 +5,7 @@
 async def async_get_config_entry_diagnostics(hass, entry):
     coordinator = entry.runtime_data
     return {
-        "version": "0.5.1",
+        "version": "0.5.2",
         "local_mode": {
             "requested": entry.options.get("local_mode"),
             "state": coordinator.local_mode.state,

@@ -99,6 +99,21 @@ class AudioCoordinator(DataUpdateCoordinator):
         except (P3Error, OSError, TimeoutError) as err:
             raise HomeAssistantError("Audio command was not confirmed") from err
 
+    async def _finish_sound(self):
+        """Stop the factory sound scene and restore local-mode lamp policy."""
+        try:
+            await self._send(4, 1)
+        finally:
+            try:
+                # Factory sound completion re-enters a white status scene even
+                # when local mode previously suppressed ordinary lighting.
+                await self.parent.control.sync_data_led(force=True)
+            except (P3Error, OSError, TimeoutError, ValueError) as err:
+                LOGGER.warning(
+                    "Could not restore local mode status lighting after sound: %s",
+                    str(err) if isinstance(err, P3Error) else type(err).__name__,
+                )
+
     def _cancel_playback(self):
         if self._playback_task:
             self._playback_task.cancel()
@@ -164,15 +179,12 @@ class AudioCoordinator(DataUpdateCoordinator):
                     if self._playback_task is not task or self._closed:
                         return
                     if deadline is not None and self.hass.loop.time() >= deadline:
-                        await self._send(4, 1)
+                        await self._finish_sound()
                         return
                     if remaining:
                         await self._send(1, payload)
                     else:
-                        # The factory player does not close its scene when the
-                        # WAV reaches EOF. Finalize it explicitly so status
-                        # lighting does not remain in the playback state.
-                        await self._send(4, 1)
+                        await self._finish_sound()
         except HomeAssistantError:
             LOGGER.exception("Sound sequence ended: audio command was not confirmed")
         finally:
@@ -189,7 +201,7 @@ class AudioCoordinator(DataUpdateCoordinator):
                 self._cancel_playback()
                 if self._closed:
                     raise HomeAssistantError("Audio service unavailable")
-                await self._send(4, 1)
+                await self._finish_sound()
         finally:
             self._tasks.discard(task)
 

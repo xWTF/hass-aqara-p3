@@ -135,6 +135,7 @@ async def test_play_defaults_and_natural_finish(audio):
         call(9, 1, '{"name":"DingDong","volume":40}'),
         call(9, 4, 1),
     ]
+    audio.parent.control.sync_data_led.assert_awaited_once_with(force=True)
 
 
 async def test_repeat_exact_count_and_fixed_volume(audio):
@@ -148,6 +149,7 @@ async def test_repeat_exact_count_and_fixed_volume(audio):
         call(9, 1, '{"name":"DingDong","volume":12}'),
         call(9, 4, 1),
     ]
+    audio.parent.control.sync_data_led.assert_awaited_once_with(force=True)
 
 
 async def test_time_limit_stops_current_play_and_future_repeats(audio):
@@ -157,6 +159,7 @@ async def test_time_limit_stops_current_play_and_future_repeats(audio):
         (9, 1),
         (9, 4),
     ]
+    audio.parent.control.sync_data_led.assert_awaited_once_with(force=True)
 
 
 async def test_repeat_count_finishes_before_long_deadline(audio):
@@ -167,6 +170,7 @@ async def test_repeat_count_finishes_before_long_deadline(audio):
         1,
         4,
     ]
+    audio.parent.control.sync_data_led.assert_awaited_once_with(force=True)
 
 
 async def test_new_play_cancels_old_deadline_and_repeats(audio):
@@ -184,6 +188,7 @@ async def test_new_play_cancels_old_deadline_and_repeats(audio):
         1,
         4,
     ]
+    audio.parent.control.sync_data_led.assert_awaited_once_with(force=True)
 
 
 async def test_explicit_stop_discards_repetitions_even_when_offline(audio):
@@ -196,6 +201,7 @@ async def test_explicit_stop_discards_repetitions_even_when_offline(audio):
     assert audio._playback_task is None
     assert previous.cancelled()
     assert audio.parent.control.audio_write.await_count == 2
+    audio.parent.control.sync_data_led.assert_awaited_once_with(force=True)
 
 
 async def test_repeat_failure_does_not_retry(audio, caplog):

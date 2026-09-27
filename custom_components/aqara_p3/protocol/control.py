@@ -128,7 +128,7 @@ class P3Control:
             raise InvalidData("Native helper version mismatch")
         session._prepared_connection = session.connection_id
 
-    async def sync_data_led(self, enabled=None):
+    async def sync_data_led(self, enabled=None, *, force=False):
         """Bind ordinary status lighting to the authenticated data login shell."""
         async with self.data_lock:
             if enabled is not None:
@@ -136,7 +136,7 @@ class P3Control:
             session = self.data_session
             if not self.local_led and enabled is None:
                 return
-            if session.connected and self._led_state == (
+            if not force and session.connected and self._led_state == (
                 session.connection_id,
                 self.local_led,
             ):

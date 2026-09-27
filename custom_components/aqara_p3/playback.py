@@ -243,7 +243,7 @@ class MediaPlayback:
             await self.stop_locked()
             if self.audio._playback_task:
                 self.audio._cancel_playback()
-                await self.audio._send(4, 1)
+                await self.audio._finish_sound()
             self.state = MediaPlayerState.BUFFERING
             self.error = None
             self.error_detail = None

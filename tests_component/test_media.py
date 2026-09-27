@@ -96,6 +96,7 @@ async def test_sound_and_media_replace_each_other(media):
     await asyncio.gather(original, return_exceptions=True)
     assert original.cancelled()
     media.audio.parent.control.audio_write.assert_awaited_with(9, 4, 1)
+    media.audio.parent.control.sync_data_led.assert_awaited_once_with(force=True)
     current = media.player.task
     await media.audio.play("DingDong")
     assert current.cancelled()

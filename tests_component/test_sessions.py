@@ -40,6 +40,9 @@ async def test_led_only_on_data_connection_and_reclaims_after_reconnect(control)
     await control.sync_data_led()
     await control.sync_data_led(True)
     assert control.data_session.run.await_count == count
+    await control.sync_data_led(force=True)
+    assert control.data_session.run.await_count == count + 2
+    assert "led-session claim " + "a" * 32 in control.data_session.run.call_args.args[0]
     control.data_session.connection_id = "b" * 32
     await control.sync_data_led()
     assert "claim " + "b" * 32 in control.data_session.run.call_args.args[0]
@@ -54,6 +57,7 @@ async def test_cloud_mode_disarms_and_invalidates_old_shell(control):
     count = control.data_session.run.await_count
     await control.sync_data_led(False)
     await control.sync_data_led()
+    await control.sync_data_led(force=True)
     assert control.data_session.run.await_count == count
 
 
